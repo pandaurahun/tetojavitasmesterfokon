@@ -5,5 +5,8 @@ BOOTSTRAP_SECRET="replace-with-a-long-random-secret"
 # Opcionális — csak az "AI ajánlatjavaslat" és "Social Content Assistant"
 # funkciókhoz kell. Nélküle ez a két funkció egyszerűen nem elérhető, minden
 # más változatlanul működik. Éles beállítás: npx wrangler secret put AI_API_KEY
-# AI_PROVIDER="anthropic"
-# AI_API_KEY="replace-with-a-real-api-key"
+# Alapértelmezett provider: Google Gemini (ingyenes API tier, AI Studio-ból kérhető kulcs).
+# AI_PROVIDER="gemini"
+# AI_API_KEY="replace-with-a-real-gemini-api-key"
+# AI_MODEL="gemini-2.5-flash"
+# Váltás Anthropicra: AI_PROVIDER="anthropic", AI_API_KEY=Anthropic-kulcs.

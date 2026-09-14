@@ -16,6 +16,40 @@ export interface AIProvider {
 }
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+// Default provider — has a free API tier, so the AI features don't require
+// a paid key to try out. Switch to Anthropic any time by setting the
+// AI_PROVIDER secret/var to "anthropic" (see getAIProvider below).
+class GeminiProvider implements AIProvider {
+  constructor(
+    private apiKey: string,
+    private model: string,
+  ) {}
+
+  async generateJSON<T>({ system, user }: { system: string; user: string }): Promise<T> {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: user }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Az AI szolgáltató hibát adott vissza (${response.status}).`);
+    }
+    const data = (await response.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    return parseJsonFromText<T>(text);
+  }
+}
 
 class AnthropicProvider implements AIProvider {
   constructor(
@@ -62,11 +96,13 @@ function parseJsonFromText<T>(text: string): T {
 export function getAIProvider(env: Env): AIProvider | null {
   const apiKey = env.AI_API_KEY;
   if (!apiKey) return null;
-  const model = env.AI_MODEL || DEFAULT_ANTHROPIC_MODEL;
-  switch (env.AI_PROVIDER || "anthropic") {
+  const providerName = env.AI_PROVIDER || "gemini";
+  switch (providerName) {
     case "anthropic":
+      return new AnthropicProvider(apiKey, env.AI_MODEL || DEFAULT_ANTHROPIC_MODEL);
+    case "gemini":
     default:
-      return new AnthropicProvider(apiKey, model);
+      return new GeminiProvider(apiKey, env.AI_MODEL || DEFAULT_GEMINI_MODEL);
   }
 }
 
