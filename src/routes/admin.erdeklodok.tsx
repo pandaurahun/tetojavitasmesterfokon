@@ -246,6 +246,32 @@ function LeadsPage() {
               <Row label="Sürgősség" value={urgencyLabels[open.urgency] ?? open.urgency} />
               <Row label="Tetőadatok" value={Object.values(open.roof ?? {}).filter(Boolean).join(" • ") || "—"} />
               <Row label="Üzenet" value={open.message ?? "—"} />
+              {open.attribution ? (
+                <>
+                  <Row label="Kampány" value={open.attribution.campaign ?? "—"} />
+                  <Row label="Csatorna (medium)" value={open.attribution.medium ?? "—"} />
+                  <Row
+                    label="Google/Meta kattintás ID"
+                    value={
+                      [
+                        open.attribution.gclid ? `gclid: ${open.attribution.gclid}` : null,
+                        open.attribution.fbclid ? `fbclid: ${open.attribution.fbclid}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "—"
+                    }
+                  />
+                  <Row label="Belépési oldal" value={open.attribution.landingPage ?? "—"} />
+                  <Row
+                    label="Első látogatás"
+                    value={
+                      open.attribution.firstTouchAt
+                        ? new Date(open.attribution.firstTouchAt).toLocaleString("hu-HU")
+                        : "—"
+                    }
+                  />
+                </>
+              ) : null}
               {open.extra
                 ? Object.entries(open.extra).map(([k, v]) => <Row key={k} label={k} value={v} />)
                 : null}

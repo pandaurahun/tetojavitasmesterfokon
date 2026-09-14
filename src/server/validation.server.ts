@@ -27,6 +27,18 @@ const noteSchema = z.object({
   text: mediumText,
 });
 
+const attributionSchema = z.object({
+  source: shortText.optional(),
+  medium: shortText.optional(),
+  campaign: shortText.optional(),
+  content: shortText.optional(),
+  term: shortText.optional(),
+  gclid: shortText.optional(),
+  fbclid: shortText.optional(),
+  landingPage: shortText.optional(),
+  firstTouchAt: shortText.optional(),
+});
+
 export const leadSchema = z.object({
   id,
   createdAt: shortText,
@@ -52,6 +64,7 @@ export const leadSchema = z.object({
     "elutasitva",
   ]),
   source: z.enum(["reszletes-ajanlatkero", "visszahivas", "telefon", "ajanlas", "kereso"]),
+  attribution: attributionSchema.optional(),
   preferredContact: shortText.optional(),
   callWindow: shortText.optional(),
   message: mediumText.optional(),

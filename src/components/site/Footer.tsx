@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { useCmsSection, useDemo } from "@/demo/store";
 import { demoUiEnabled } from "@/lib/features";
+import { trackPhoneClick } from "@/lib/analytics";
 import { Mark } from "./Header";
 
 export function Footer() {
@@ -63,6 +64,7 @@ export function Footer() {
         <FooterCol title={value("contactTitle", "Elérhetőség")}>
           <a
             href={`tel:${settings.phone.replace(/\s/g, "")}`}
+            onClick={() => trackPhoneClick()}
             className="flex items-center gap-2 hover:text-accent"
           >
             <Phone className="h-3.5 w-3.5" /> {settings.phone}

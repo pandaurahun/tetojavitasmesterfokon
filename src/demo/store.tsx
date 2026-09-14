@@ -10,6 +10,8 @@ import {
 } from "react";
 import { articles as staticArticles, defaultBranding } from "./data";
 import { initialState, type DemoState } from "./default-state";
+import { getStoredAttribution } from "@/lib/attribution";
+import { trackLeadSubmit } from "@/lib/analytics";
 import type {
   Branding,
   ContentBlock,
@@ -253,8 +255,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       uploadMedia,
       update,
       addLead: async (lead) => {
+        const attribution = getStoredAttribution();
         const persistedLead: Lead = {
           ...lead,
+          ...(attribution ? { attribution } : {}),
           files: lead.files.map(({ dataUrl: _dataUrl, ...file }) => file),
         };
         const response = await fetch("/api/leads", {
@@ -264,6 +268,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         });
         if (!response.ok) throw new Error("Az ajánlatkérés mentése nem sikerült.");
         mutate((p) => ({ ...p, leads: [persistedLead, ...p.leads] }));
+        trackLeadSubmit();
       },
       updateLead: (id, patch) =>
         mutate((p) => ({

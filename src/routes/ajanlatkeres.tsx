@@ -24,6 +24,7 @@ import { useCmsSection, useDemo, newId, nowStamp } from "@/demo/store";
 import { urgencyLabels } from "@/demo/data";
 import type { CustomField, DemoFile, Lead, Urgency } from "@/demo/types";
 import { demoUiEnabled } from "@/lib/features";
+import { trackQuoteRequestSubmit } from "@/lib/analytics";
 
 export const Route = createFileRoute("/ajanlatkeres")({
   validateSearch: (
@@ -321,6 +322,7 @@ function QuoteWizard() {
     setSubmitError(null);
     try {
       await addLead(lead);
+      trackQuoteRequestSubmit();
       try {
         window.localStorage.removeItem(WIZ_KEY);
       } catch {

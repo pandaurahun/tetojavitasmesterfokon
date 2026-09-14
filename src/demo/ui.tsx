@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X, PhoneCall, Check } from "lucide-react";
 import { useCmsSection, useDemo, newId, nowStamp } from "./store";
+import { trackCallbackSubmit } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,6 +91,7 @@ function CallbackModal({
         notes: [],
         timeline: [{ id: newId("tl"), date: nowStamp(), title: "Visszahívás kérés a weboldalról" }],
       });
+      trackCallbackSubmit();
       setDone(true);
     } catch {
       setSubmitError("A kérés mentése nem sikerült. Kérjük, próbáld újra vagy hívj minket.");

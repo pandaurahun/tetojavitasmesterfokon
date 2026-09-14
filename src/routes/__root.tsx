@@ -4,10 +4,11 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { DemoProvider, BrandingScope } from "../demo/store";
@@ -16,6 +17,8 @@ import { DemoBar } from "../components/site/DemoBar";
 import { SiteIdentity } from "../components/site/SiteIdentity";
 import { Toaster } from "../components/ui/sonner";
 import { demoUiEnabled } from "../lib/features";
+import { initAnalytics, trackPageView } from "../lib/analytics";
+import { captureAttributionFromUrl } from "../lib/attribution";
 
 function NotFoundComponent() {
   return (
@@ -83,6 +86,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "author", content: "TetőVonal" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      ...(import.meta.env["VITE_GOOGLE_SITE_VERIFICATION"]
+        ? [
+            {
+              name: "google-site-verification",
+              content: import.meta.env["VITE_GOOGLE_SITE_VERIFICATION"] as string,
+            },
+          ]
+        : []),
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -117,6 +128,25 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function Analytics() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    captureAttributionFromUrl();
+    initAnalytics();
+  }, []);
+
+  useEffect(() => {
+    // Deferred (not requestAnimationFrame — that never fires while the tab
+    // is backgrounded, which would silently drop the event) so TanStack
+    // Router's <HeadContent/> has applied the new <title> by the time we read it.
+    const timer = setTimeout(() => trackPageView(pathname, document.title), 50);
+    return () => clearTimeout(timer);
+  }, [pathname]);
+
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -126,6 +156,7 @@ function RootComponent() {
         <CallbackProvider>
           <BrandingScope className="min-h-screen bg-background text-foreground">
             <SiteIdentity />
+            <Analytics />
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
             {demoUiEnabled ? <DemoBar /> : null}

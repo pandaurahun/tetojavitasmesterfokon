@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Phone, PhoneCall, FileText } from "lucide-react";
 import { useCmsSection, useDemo } from "@/demo/store";
 import { useCallbackModal } from "@/demo/ui";
+import { trackPhoneClick } from "@/lib/analytics";
 
 export function MobileCta() {
   const { settings } = useDemo();
@@ -15,6 +16,7 @@ export function MobileCta() {
       <div className="grid grid-cols-3 divide-x divide-border">
         <a
           href={`tel:${settings.phone.replace(/\s/g, "")}`}
+          onClick={() => trackPhoneClick()}
           className="flex flex-col items-center gap-1 py-3 text-xs font-medium"
         >
           <Phone className="h-4 w-4 text-accent" />

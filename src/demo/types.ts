@@ -29,6 +29,18 @@ export interface TimelineEntry {
   detail?: string | undefined;
 }
 
+export interface LeadAttribution {
+  source?: string | undefined;
+  medium?: string | undefined;
+  campaign?: string | undefined;
+  content?: string | undefined;
+  term?: string | undefined;
+  gclid?: string | undefined;
+  fbclid?: string | undefined;
+  landingPage?: string | undefined;
+  firstTouchAt?: string | undefined;
+}
+
 export interface LeadNote {
   id: string;
   date: string;
@@ -50,6 +62,7 @@ export interface Lead {
   urgency: Urgency;
   status: LeadStatus;
   source: LeadSource;
+  attribution?: LeadAttribution | undefined;
   preferredContact?: string | undefined;
   callWindow?: string | undefined;
   message?: string | undefined;

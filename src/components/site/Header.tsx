@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Menu, X, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCmsSection, useDemo } from "@/demo/store";
+import { trackPhoneClick } from "@/lib/analytics";
 
 export function Header() {
   const { branding, settings } = useDemo();
@@ -74,6 +75,7 @@ export function Header() {
           <div className="flex shrink-0 items-center gap-2">
             <a
               href={`tel:${settings.phone.replace(/\s/g, "")}`}
+              onClick={() => trackPhoneClick()}
               className="hidden items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:flex"
             >
               <Phone className="h-4 w-4 text-accent" />
@@ -136,7 +138,9 @@ export function Header() {
                   </Link>
                 </Button>
                 <Button asChild variant="hairline" size="lg" className="w-full">
-                  <a href={`tel:${settings.phone.replace(/\s/g, "")}`}>{settings.phone}</a>
+                  <a href={`tel:${settings.phone.replace(/\s/g, "")}`} onClick={() => trackPhoneClick()}>
+                    {settings.phone}
+                  </a>
                 </Button>
               </motion.div>
             </nav>
