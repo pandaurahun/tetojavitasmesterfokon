@@ -57,7 +57,7 @@ function LeadsPage() {
   return (
     <AdminPage
       title="Érdeklődők"
-      intro="Táblázatos és Kanban nézet, szűrőkkel. A módosítások azonnal mentődnek a böngésző helyi tárolójába."
+      intro="Táblázatos és Kanban nézet, szűrőkkel. A módosítások automatikusan mentődnek a szerverre."
       actions={
         <div className="flex gap-2">
           <Button variant={view === "tabla" ? "ink" : "outline"} size="sm" onClick={() => setView("tabla")}>

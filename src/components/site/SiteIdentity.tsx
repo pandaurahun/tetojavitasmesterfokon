@@ -29,7 +29,7 @@ export function SiteIdentity() {
     if (!link) {
       link = document.createElement("link");
       link.rel = "icon";
-      link.dataset.siteFavicon = "dynamic";
+      link.dataset["siteFavicon"] = "dynamic";
       document.head.appendChild(link);
     }
 

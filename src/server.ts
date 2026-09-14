@@ -51,7 +51,7 @@ export default {
       const url = new URL(request.url);
       if (url.hostname === "www.tetojavitasmesterfokon.hu") {
         url.hostname = "tetojavitasmesterfokon.hu";
-        return Response.redirect(url, 308);
+        return Response.redirect(url, 301);
       }
 
       const apiResponse = await handleBackendRequest(request, env);
