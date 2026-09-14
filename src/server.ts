@@ -45,6 +45,16 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// Belt-and-suspenders: admin/login must never be indexable even if a page's
+// own <meta name="robots"> is missing or gets overridden — robots.txt alone
+// is not enforcement, since it only asks crawlers not to fetch the page.
+function withRobotsHeader(response: Response, pathname: string): Response {
+  if (pathname !== "/admin" && !pathname.startsWith("/admin/")) return response;
+  const headers = new Headers(response.headers);
+  headers.set("X-Robots-Tag", "noindex, nofollow");
+  return new Response(response.body, { status: response.status, headers });
+}
+
 export default {
   async fetch(request: Request, env?: Env, ctx?: ExecutionContext) {
     try {
@@ -55,10 +65,10 @@ export default {
       }
 
       const apiResponse = await handleBackendRequest(request, env);
-      if (apiResponse) return apiResponse;
+      if (apiResponse) return withRobotsHeader(apiResponse, url.pathname);
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return withRobotsHeader(await normalizeCatastrophicSsrResponse(response), url.pathname);
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {

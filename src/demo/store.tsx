@@ -34,6 +34,7 @@ interface DemoContextValue extends DemoState {
   syncError: string | null;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
   uploadMedia: (file: File) => Promise<string>;
   update: (patch: Partial<DemoState>) => void;
   addLead: (lead: Lead) => Promise<void>;
@@ -207,6 +208,24 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     setState(initialState);
   }, [persistState]);
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string): Promise<string | null> => {
+      try {
+        const response = await fetch("/api/admin/password", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        if (!response.ok) return payload.error ?? "A jelszó módosítása nem sikerült.";
+        return null;
+      } catch {
+        return "A backend nem érhető el.";
+      }
+    },
+    [],
+  );
+
   const uploadMedia = useCallback(async (file: File): Promise<string> => {
     const response = await fetch("/api/admin/media", {
       method: "POST",
@@ -230,6 +249,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       syncError,
       login,
       logout,
+      changePassword,
       uploadMedia,
       update,
       addLead: async (lead) => {
@@ -334,6 +354,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     syncError,
     login,
     logout,
+    changePassword,
     uploadMedia,
     update,
     mutate,

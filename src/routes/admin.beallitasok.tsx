@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
+import { LoaderCircle, ShieldCheck } from "lucide-react";
 import { AdminPage, AdminField, Panel } from "@/components/admin/ui";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -103,7 +105,87 @@ function SettingsAdmin() {
           </Panel>
         </div>
       </div>
+
+      <PasswordPanel />
     </AdminPage>
+  );
+}
+
+function PasswordPanel() {
+  const { changePassword } = useDemo();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    if (newPassword !== confirmPassword) {
+      setError("A két új jelszó nem egyezik.");
+      return;
+    }
+    setSubmitting(true);
+    const message = await changePassword(currentPassword, newPassword);
+    setSubmitting(false);
+    if (message) {
+      setError(message);
+      return;
+    }
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    toast.success("A jelszó módosítva.");
+  };
+
+  return (
+    <Panel
+      title="Fiókbiztonság"
+      description="A jelszó módosítása minden más aktív munkamenetet kijelentkeztet, ez a böngésző marad bejelentkezve."
+      className="max-w-xl"
+    >
+      <form onSubmit={submit} className="grid gap-3">
+        <AdminField label="Jelenlegi jelszó">
+          <Input
+            type="password"
+            autoComplete="current-password"
+            required
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+          />
+        </AdminField>
+        <AdminField label="Új jelszó" hint="Legalább 12 karakter.">
+          <Input
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            required
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </AdminField>
+        <AdminField label="Új jelszó megerősítése">
+          <Input
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </AdminField>
+        {error ? (
+          <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" variant="copper" disabled={submitting} className="w-fit">
+          {submitting ? <LoaderCircle className="animate-spin" /> : <ShieldCheck />}
+          Jelszó módosítása
+        </Button>
+      </form>
+    </Panel>
   );
 }
 

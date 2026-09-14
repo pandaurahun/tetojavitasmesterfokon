@@ -248,3 +248,8 @@ export const loginSchema = z.object({
 });
 
 export const bootstrapSchema = loginSchema;
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(12).max(200),
+});

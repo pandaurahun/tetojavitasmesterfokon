@@ -6,9 +6,11 @@ import {
   type DemoState,
   type SiteState,
 } from "@/demo/default-state";
+import { articles } from "@/demo/data";
 import type { Lead, Quote } from "@/demo/types";
 import {
   bootstrapSchema,
+  changePasswordSchema,
   demoStateSchema,
   leadSchema,
   loginSchema,
@@ -425,6 +427,46 @@ async function logout(request: Request, workerEnv: Env): Promise<Response> {
   });
 }
 
+async function changePassword(request: Request, workerEnv: Env): Promise<Response> {
+  if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
+  const session = await authenticate(request, workerEnv);
+  if (!session) return apiError(401, "Bejelentkezés szükséges.");
+  const parsed = changePasswordSchema.safeParse(await readJson(request, 4_096));
+  if (!parsed.success) return apiError(400, "Érvénytelen jelszóadatok.");
+
+  const admin = await workerEnv.DB.prepare(
+    `SELECT id, email, password_hash, password_salt, password_iterations, role
+       FROM admins WHERE id = ?1`,
+  )
+    .bind(session.admin_id)
+    .first<AdminRow>();
+  const valid = await verifyPassword(parsed.data.currentPassword, admin);
+  if (!valid || !admin) return apiError(401, "A jelenlegi jelszó helytelen.");
+
+  const next = await hashPassword(parsed.data.newPassword);
+  const now = Date.now();
+  const currentToken = parseCookies(request).get(cookieName(request)) ?? "";
+  const currentTokenHash = await sha256Hex(currentToken);
+  await workerEnv.DB.batch([
+    workerEnv.DB.prepare(
+      `UPDATE admins SET password_hash = ?1, password_salt = ?2, password_iterations = ?3, updated_at = ?4
+        WHERE id = ?5`,
+    ).bind(next.hash, next.salt, next.iterations, now, admin.id),
+    workerEnv.DB.prepare(`DELETE FROM sessions WHERE admin_id = ?1 AND token_hash != ?2`).bind(
+      admin.id,
+      currentTokenHash,
+    ),
+  ]);
+  console.log(
+    JSON.stringify({
+      event: "admin_password_changed",
+      adminId: admin.id,
+      at: new Date(now).toISOString(),
+    }),
+  );
+  return json({ ok: true });
+}
+
 function mediaKey(pathname: string): string | null {
   const encoded = pathname.slice("/api/media/".length);
   let key: string;
@@ -481,13 +523,58 @@ async function uploadMedia(request: Request, workerEnv: Env): Promise<Response> 
   return json({ key, url: `/api/media/${key}` }, { status: 201 });
 }
 
+const SITE_ORIGIN = "https://tetojavitasmesterfokon.hu";
+
+function xmlEscape(value: string): string {
+  return value.replace(/[<>&'"]/g, (char) =>
+    char === "<"
+      ? "&lt;"
+      : char === ">"
+        ? "&gt;"
+        : char === "&"
+          ? "&amp;"
+          : char === "'"
+            ? "&apos;"
+            : "&quot;",
+  );
+}
+
+async function generateSitemap(workerEnv: Env): Promise<Response> {
+  const state = await loadState(workerEnv);
+  const urls = [
+    "/",
+    "/szolgaltatasok",
+    ...state.services.filter((s) => s.active).map((s) => `/szolgaltatasok/${s.slug}`),
+    "/referenciak",
+    ...state.projects.filter((p) => p.published).map((p) => `/referenciak/${p.id}`),
+    "/folyamat",
+    "/tudastar",
+    ...articles.map((a) => `/tudastar/${a.slug}`),
+    "/kapcsolat",
+  ];
+  const body =
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    urls.map((path) => `  <url><loc>${xmlEscape(SITE_ORIGIN + path)}</loc></url>`).join("\n") +
+    `\n</urlset>\n`;
+  return new Response(body, {
+    headers: {
+      "Content-Type": "application/xml; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
+
 export async function handleBackendRequest(
   request: Request,
   workerEnv?: Env,
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith("/api/")) return null;
   const runtimeEnv = workerEnv ?? cloudflareEnv;
+  if (request.method === "GET" && url.pathname === "/sitemap.xml") {
+    return await generateSitemap(runtimeEnv);
+  }
+  if (!url.pathname.startsWith("/api/")) return null;
 
   try {
     if (request.method === "GET" && url.pathname.startsWith("/api/media/")) {
@@ -549,6 +636,9 @@ export async function handleBackendRequest(
     }
     if (request.method === "POST" && url.pathname === "/api/admin/media") {
       return await uploadMedia(request, runtimeEnv);
+    }
+    if (request.method === "PUT" && url.pathname === "/api/admin/password") {
+      return await changePassword(request, runtimeEnv);
     }
     return apiError(404, "Az API-végpont nem található.");
   } catch (error) {
