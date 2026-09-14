@@ -21,15 +21,6 @@ const FAVICON_TYPES = new Set([
   "image/vnd.microsoft.icon",
 ]);
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("A favicon fájl nem olvasható."));
-    reader.readAsDataURL(file);
-  });
-}
-
 function sanitizeSvg(source: string): string {
   const documentNode = new DOMParser().parseFromString(source, "image/svg+xml");
   const root = documentNode.documentElement;
@@ -57,7 +48,9 @@ function sanitizeSvg(source: string): string {
   return new XMLSerializer().serializeToString(root);
 }
 
-async function faviconDataUrl(file: File): Promise<string> {
+// Sanitized locally before upload, then stored in R2 (not embedded as a data:
+// URL in the D1 site-state blob) — same media pipeline as reference photos.
+async function preparedFaviconFile(file: File): Promise<File> {
   if (file.size > MAX_FAVICON_BYTES) {
     throw new Error("A favicon legfeljebb 256 KB lehet.");
   }
@@ -70,14 +63,20 @@ async function faviconDataUrl(file: File): Promise<string> {
 
   if (file.type === "image/svg+xml" || extension === "svg") {
     const sanitized = sanitizeSvg(await file.text());
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sanitized)}`;
+    return new File([sanitized], file.name, { type: "image/svg+xml" });
   }
 
-  return readAsDataUrl(file);
+  // Some browsers/OSes report no (or a non-standard) MIME type for .ico files;
+  // the upload endpoint matches strictly on Content-Type, so normalize it.
+  if (extension === "ico" && file.type !== "image/x-icon" && file.type !== "image/vnd.microsoft.icon") {
+    return new File([file], file.name, { type: "image/x-icon" });
+  }
+
+  return file;
 }
 
 function BrandingAdmin() {
-  const { branding, setBranding, resetBranding, updateCmsValue } = useDemo();
+  const { branding, setBranding, resetBranding, updateCmsValue, uploadMedia } = useDemo();
   const { value } = useCmsSection("home.hero");
 
   const handleFavicon = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,7 +85,9 @@ function BrandingAdmin() {
     if (!file) return;
 
     try {
-      setBranding({ faviconUrl: await faviconDataUrl(file) });
+      const prepared = await preparedFaviconFile(file);
+      const url = await uploadMedia(prepared);
+      setBranding({ faviconUrl: url });
       toast.success("A böngészőikon frissült.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "A favicon frissítése nem sikerült.");

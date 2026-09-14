@@ -489,6 +489,7 @@ async function serveMedia(pathname: string, workerEnv: Env): Promise<Response> {
     ETag: object.httpEtag,
     "Cache-Control": "public, max-age=31536000, immutable",
     "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "script-src 'none'",
   });
   object.writeHttpMetadata(headers);
   return new Response(object.body, { headers });
@@ -506,9 +507,12 @@ async function uploadMedia(request: Request, workerEnv: Env): Promise<Response> 
     "image/png": "png",
     "image/webp": "webp",
     "image/avif": "avif",
+    "image/svg+xml": "svg",
+    "image/x-icon": "ico",
+    "image/vnd.microsoft.icon": "ico",
   };
   const extension = extensions[mime];
-  if (!extension) return apiError(415, "Csak JPEG, PNG, WebP vagy AVIF kép tölthető fel.");
+  if (!extension) return apiError(415, "Csak JPEG, PNG, WebP, AVIF, SVG vagy ICO kép tölthető fel.");
   const size = Number(request.headers.get("content-length") ?? 0);
   if (!Number.isFinite(size) || size <= 0) return apiError(411, "A fájlméret megadása szükséges.");
   if (size > 10 * 1024 * 1024) return apiError(413, "A kép legfeljebb 10 MB lehet.");
