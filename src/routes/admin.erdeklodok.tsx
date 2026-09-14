@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AdminPage, AdminField, NativeSelect, Panel, StatusPill, UrgencyPill, EmptyState } from "@/components/admin/ui";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { FileText } from "lucide-react";
 import { useDemo, newId, nowStamp } from "@/demo/store";
 import { statusLabels, statusOrder, sourceLabels, urgencyLabels, owners } from "@/demo/data";
 import type { Lead, LeadStatus } from "@/demo/types";
@@ -223,9 +224,16 @@ function LeadsPage() {
           title={`${open.name} — ${open.id.toUpperCase()}`}
           description={`Beérkezett: ${new Date(open.createdAt).toLocaleString("hu-HU")} • Frissítve: ${open.updatedAt ? new Date(open.updatedAt).toLocaleString("hu-HU") : "—"} • Forrás: ${sourceLabels[open.source] ?? open.source}`}
           actions={
-            <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>
-              Bezárás
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="copper">
+                <Link to="/admin/arajanlatok" search={{ leadId: open.id }}>
+                  <FileText /> Árajánlat készítése
+                </Link>
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>
+                Bezárás
+              </Button>
+            </div>
           }
         >
           <div className="grid gap-6 lg:grid-cols-2">

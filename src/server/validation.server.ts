@@ -79,9 +79,10 @@ export const leadSchema = z.object({
 const quoteItemSchema = z.object({
   id,
   name: shortText,
-  qty: z.number().finite(),
+  description: mediumText.optional(),
+  qty: z.number().finite().min(0),
   unit: shortText,
-  unitPrice: z.number().finite(),
+  unitPrice: z.number().finite().min(0),
   vat: z.number().min(0).max(100),
 });
 
@@ -108,6 +109,7 @@ const quoteSchema = z.object({
   items: z.array(quoteItemSchema).max(500),
   discountPercent: z.number().min(0).max(100),
   note: mediumText,
+  internalNote: mediumText.optional(),
   payment: mediumText,
   warranty: mediumText,
 });

@@ -87,6 +87,7 @@ export type QuoteStatus =
 export interface QuoteItem {
   id: string;
   name: string;
+  description?: string | undefined;
   qty: number;
   unit: string;
   unitPrice: number;
@@ -107,6 +108,7 @@ export interface Quote {
   items: QuoteItem[];
   discountPercent: number;
   note: string;
+  internalNote?: string | undefined;
   payment: string;
   warranty: string;
 }

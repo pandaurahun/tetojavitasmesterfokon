@@ -215,3 +215,33 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Isolates a single element (the quote preview) on window.print() — hide
+   everything, then un-hide just that subtree at the page origin. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+}

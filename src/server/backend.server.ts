@@ -7,6 +7,7 @@ import {
   type SiteState,
 } from "@/demo/default-state";
 import { articles } from "@/demo/data";
+import { quoteTotals } from "@/demo/calc";
 import type { Lead, Quote } from "@/demo/types";
 import {
   bootstrapSchema,
@@ -279,6 +280,16 @@ async function saveState(state: DemoState, workerEnv: Env): Promise<void> {
     ),
   ];
   await database.batch(statements);
+}
+
+// Quotes never store their totals — they're always derived from items, so a
+// client bug can't leave a stale/wrong number sitting in D1. This still
+// rejects nonsensical input (NaN/negative) instead of trusting the client.
+function quoteCalculationsAreSane(quotes: Quote[]): boolean {
+  return quotes.every((quote) => {
+    const totals = quoteTotals(quote);
+    return Object.values(totals).every((value) => Number.isFinite(value) && value >= -0.01);
+  });
 }
 
 function publicState(state: DemoState): DemoState {
@@ -635,6 +646,9 @@ export async function handleBackendRequest(
       }
       const parsed = demoStateSchema.safeParse(await readJson(request, 1_500_000));
       if (!parsed.success) return apiError(400, "A mentendő adatok nem megfelelőek.");
+      if (!quoteCalculationsAreSane(parsed.data.quotes)) {
+        return apiError(400, "Az árajánlat tételei érvénytelen összeget adnak.");
+      }
       await saveState(parsed.data, runtimeEnv);
       return json({ ok: true });
     }
