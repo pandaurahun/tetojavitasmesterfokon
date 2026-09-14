@@ -69,6 +69,8 @@ export const leadSchema = z.object({
   files: z.array(demoFileSchema).max(10),
   owner: shortText,
   nextTask: shortText.optional(),
+  nextTaskDue: shortText.optional(),
+  updatedAt: shortText.optional(),
   notes: z.array(noteSchema).max(500),
   timeline: z.array(timelineSchema).max(500),
   extra: z.record(z.string(), mediumText).optional(),

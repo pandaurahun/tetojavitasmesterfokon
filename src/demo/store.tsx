@@ -268,7 +268,9 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       updateLead: (id, patch) =>
         mutate((p) => ({
           ...p,
-          leads: p.leads.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+          leads: p.leads.map((l) =>
+            l.id === id ? { ...l, ...patch, updatedAt: new Date().toISOString() } : l,
+          ),
         })),
       upsertQuote: (quote) =>
         mutate((p) => ({

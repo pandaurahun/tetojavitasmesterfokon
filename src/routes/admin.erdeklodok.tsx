@@ -21,6 +21,7 @@ function LeadsPage() {
   const [city, setCity] = useState("");
   const [status, setStatus] = useState("");
   const [urgency, setUrgency] = useState("");
+  const [source, setSource] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [note, setNote] = useState("");
 
@@ -33,10 +34,11 @@ function LeadsPage() {
           (!service || l.service === service) &&
           (!city || l.city === city) &&
           (!status || l.status === status) &&
-          (!urgency || l.urgency === urgency)
+          (!urgency || l.urgency === urgency) &&
+          (!source || l.source === source)
         );
       }),
-    [leads, q, service, city, status, urgency],
+    [leads, q, service, city, status, urgency, source],
   );
 
   const cities = [...new Set(leads.map((l) => l.city))];
@@ -70,7 +72,7 @@ function LeadsPage() {
       }
     >
       <Panel>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <AdminField label="Keresés">
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Név, telefon, város" />
           </AdminField>
@@ -104,6 +106,16 @@ function LeadsPage() {
             <NativeSelect value={urgency} onChange={setUrgency}>
               <option value="">Mind</option>
               {Object.entries(urgencyLabels).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </NativeSelect>
+          </AdminField>
+          <AdminField label="Forrás">
+            <NativeSelect value={source} onChange={setSource}>
+              <option value="">Mind</option>
+              {Object.entries(sourceLabels).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v}
                 </option>
@@ -209,7 +221,7 @@ function LeadsPage() {
       {open ? (
         <Panel
           title={`${open.name} — ${open.id.toUpperCase()}`}
-          description={`Beérkezett: ${new Date(open.createdAt).toLocaleString("hu-HU")} • Forrás: ${sourceLabels[open.source] ?? open.source}`}
+          description={`Beérkezett: ${new Date(open.createdAt).toLocaleString("hu-HU")} • Frissítve: ${open.updatedAt ? new Date(open.updatedAt).toLocaleString("hu-HU") : "—"} • Forrás: ${sourceLabels[open.source] ?? open.source}`}
           actions={
             <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>
               Bezárás
@@ -263,6 +275,14 @@ function LeadsPage() {
                 <Input
                   value={open.nextTask ?? ""}
                   onChange={(e) => updateLead(open.id, { nextTask: e.target.value })}
+                  placeholder="Pl. helyszíni felmérés egyeztetése"
+                />
+              </AdminField>
+              <AdminField label="Határidő" hint="Opcionális.">
+                <Input
+                  type="date"
+                  value={open.nextTaskDue ?? ""}
+                  onChange={(e) => updateLead(open.id, { nextTaskDue: e.target.value })}
                 />
               </AdminField>
 

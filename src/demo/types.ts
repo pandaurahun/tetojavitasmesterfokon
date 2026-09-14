@@ -67,6 +67,8 @@ export interface Lead {
   files: DemoFile[];
   owner: string;
   nextTask?: string | undefined;
+  nextTaskDue?: string | undefined;
+  updatedAt?: string | undefined;
   notes: LeadNote[];
   timeline: TimelineEntry[];
   extra?: Record<string, string> | undefined;
