@@ -15,6 +15,7 @@ import { DemoProvider, BrandingScope } from "../demo/store";
 import { CallbackProvider } from "../demo/ui";
 import { DemoBar } from "../components/site/DemoBar";
 import { SiteIdentity } from "../components/site/SiteIdentity";
+import { ConsentProvider } from "../components/site/ConsentBanner";
 import { Toaster } from "../components/ui/sonner";
 import { demoUiEnabled } from "../lib/features";
 import { initAnalytics, trackPageView } from "../lib/analytics";
@@ -154,14 +155,16 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <DemoProvider>
         <CallbackProvider>
-          <BrandingScope className="min-h-screen bg-background text-foreground">
-            <SiteIdentity />
-            <Analytics />
-            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-            <Outlet />
-            {demoUiEnabled ? <DemoBar /> : null}
-            <Toaster position="top-center" />
-          </BrandingScope>
+          <ConsentProvider>
+            <BrandingScope className="min-h-screen bg-background text-foreground">
+              <SiteIdentity />
+              <Analytics />
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+              {demoUiEnabled ? <DemoBar /> : null}
+              <Toaster position="top-center" />
+            </BrandingScope>
+          </ConsentProvider>
         </CallbackProvider>
       </DemoProvider>
     </QueryClientProvider>

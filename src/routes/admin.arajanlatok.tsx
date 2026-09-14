@@ -11,6 +11,8 @@ import { quoteTotals, nextQuoteNumber, addDays } from "@/demo/calc";
 import type { Quote, QuoteStatus } from "@/demo/types";
 import { toast } from "sonner";
 
+const AI_QUOTE_DRAFT_STORAGE_KEY = "ai-quote-draft-handoff";
+
 export const Route = createFileRoute("/admin/arajanlatok")({
   validateSearch: (search: Record<string, unknown>): { leadId?: string } =>
     typeof search["leadId"] === "string" ? { leadId: search["leadId"] } : {},
@@ -56,6 +58,19 @@ function QuotesPage() {
       payment: "30% előleg, 70% átadáskor",
       warranty: "Kivitelezésre 5 év, anyagra gyártói garancia.",
     };
+    // An "AI ajánlatjavaslat" accepted on the lead page hands its items off
+    // through sessionStorage (too much data for a URL) — consume it once.
+    try {
+      const raw = sessionStorage.getItem(AI_QUOTE_DRAFT_STORAGE_KEY);
+      if (raw) {
+        const handoff = JSON.parse(raw) as { leadId: string; draft: Partial<Quote> };
+        sessionStorage.removeItem(AI_QUOTE_DRAFT_STORAGE_KEY);
+        if (handoff.leadId === id) Object.assign(quote, handoff.draft);
+      }
+    } catch {
+      /* malformed/unavailable handoff — fall back to the default single item */
+    }
+
     setEditing(quote);
     if (lead.status !== "ajanlat-keszul") {
       updateLead(lead.id, {

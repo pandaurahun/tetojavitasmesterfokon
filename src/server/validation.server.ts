@@ -232,6 +232,16 @@ const legalSchema = z.object({
   published: z.boolean(),
 });
 
+const socialLinksSchema = z.object({
+  facebook: shortText.optional(),
+  instagram: shortText.optional(),
+  messenger: shortText.optional(),
+  tiktok: shortText.optional(),
+  youtube: shortText.optional(),
+  linkedin: shortText.optional(),
+  whatsapp: shortText.optional(),
+});
+
 const settingsSchema = z.object({
   company: shortText,
   contactName: shortText,
@@ -241,6 +251,7 @@ const settingsSchema = z.object({
   taxNumber: shortText,
   areas: z.array(shortText).max(500),
   workingHours: shortText,
+  socialLinks: socialLinksSchema.optional(),
 });
 
 export const siteStateSchema = z.object({

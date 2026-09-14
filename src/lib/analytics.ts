@@ -1,11 +1,14 @@
 // Central marketing/analytics module. Loads and fires only in production
-// builds. Google Consent Mode v2 (gtag) and Meta's fbq('consent') API start
-// denied — no separate consent system is built here; a future consent
-// banner should call grantMarketingConsent() once the visitor opts in.
+// builds, and only after the relevant consent category is granted — no
+// script is fetched, no cookie is set, before that. Google Consent Mode v2
+// (gtag) and Meta's fbq('consent') API carry the per-category signal once
+// consent is known; ConsentBanner (components/site) is the UI that calls the
+// exported grant/revoke functions below.
 
 const GA_ID = import.meta.env["VITE_GA_MEASUREMENT_ID"] as string | undefined;
 const ADS_ID = import.meta.env["VITE_GOOGLE_ADS_ID"] as string | undefined;
 const PIXEL_ID = import.meta.env["VITE_META_PIXEL_ID"] as string | undefined;
+const SITE_VERIFICATION = import.meta.env["VITE_GOOGLE_SITE_VERIFICATION"] as string | undefined;
 
 const ADS_LABELS: Record<ConversionEvent, string | undefined> = {
   lead_submit: import.meta.env["VITE_GOOGLE_ADS_LABEL_LEAD_SUBMIT"] as string | undefined,
@@ -17,10 +20,28 @@ const ADS_LABELS: Record<ConversionEvent, string | undefined> = {
 };
 
 const ENABLED = import.meta.env.PROD;
-const CONSENT_KEY = "marketing_consent";
+const CONSENT_KEY = "consent_v1";
 const SITE_ORIGIN = "https://tetojavitasmesterfokon.hu";
 
 type ConversionEvent = "lead_submit" | "callback_submit" | "quote_request_submit" | "phone_click";
+
+export interface ConsentState {
+  analytics: boolean;
+  marketing: boolean;
+  decidedAt: string;
+}
+
+// What the business has actually configured — not whether the visitor has
+// consented. Safe to expose client-side: these booleans reveal nothing, the
+// real IDs are already public in the loaded scripts once consent is granted.
+export function getTrackingStatus() {
+  return {
+    ga4: Boolean(GA_ID),
+    googleAds: Boolean(ADS_ID),
+    metaPixel: Boolean(PIXEL_ID),
+    searchConsoleVerification: Boolean(SITE_VERIFICATION),
+  };
+}
 
 type FbqFunction = {
   (...args: unknown[]): void;
@@ -40,7 +61,9 @@ declare global {
   }
 }
 
-let initialized = false;
+let coreInitialized = false;
+let googleLoaded = false;
+let metaLoaded = false;
 
 function loadScript(src: string) {
   const script = document.createElement("script");
@@ -54,8 +77,17 @@ function gtag(...args: unknown[]) {
   window.dataLayer.push(args);
 }
 
-function initMetaPixel() {
-  if (!PIXEL_ID || window.fbq) return;
+function ensureGoogleLoaded() {
+  if (googleLoaded || (!GA_ID && !ADS_ID)) return;
+  googleLoaded = true;
+  loadScript(`https://www.googletagmanager.com/gtag/js?id=${GA_ID ?? ADS_ID}`);
+  if (GA_ID) gtag("config", GA_ID, { send_page_view: false });
+  if (ADS_ID) gtag("config", ADS_ID);
+}
+
+function ensureMetaLoaded() {
+  if (metaLoaded || !PIXEL_ID || window.fbq) return;
+  metaLoaded = true;
   const fbq = ((...args: unknown[]) => {
     if (fbq.callMethod) fbq.callMethod(...args);
     else fbq.queue.push(args);
@@ -68,21 +100,76 @@ function initMetaPixel() {
   window._fbq = fbq;
 
   loadScript("https://connect.facebook.net/en_US/fbevents.js");
-  fbq("consent", "revoke");
   fbq("init", PIXEL_ID);
 }
 
-function hasStoredConsent(): boolean {
+function readConsent(): ConsentState | null {
   try {
-    return localStorage.getItem(CONSENT_KEY) === "granted";
+    const raw = localStorage.getItem(CONSENT_KEY);
+    return raw ? (JSON.parse(raw) as ConsentState) : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
+export function getConsentState(): ConsentState | null {
+  return readConsent();
+}
+
+export function hasConsent(category: "analytics" | "marketing"): boolean {
+  return readConsent()?.[category] === true;
+}
+
+function applySignals(state: ConsentState) {
+  window.gtag?.("consent", "update", {
+    analytics_storage: state.analytics ? "granted" : "denied",
+    ad_storage: state.marketing ? "granted" : "denied",
+    ad_user_data: state.marketing ? "granted" : "denied",
+    ad_personalization: state.marketing ? "granted" : "denied",
+  });
+  window.fbq?.("consent", state.marketing ? "grant" : "revoke");
+}
+
+function setConsent(partial: Partial<Pick<ConsentState, "analytics" | "marketing">>) {
+  if (!ENABLED) return;
+  const current = readConsent() ?? { analytics: false, marketing: false, decidedAt: "" };
+  const next: ConsentState = { ...current, ...partial, decidedAt: new Date().toISOString() };
+  try {
+    localStorage.setItem(CONSENT_KEY, JSON.stringify(next));
+  } catch {
+    /* private mode etc. — consent just won't persist across sessions */
+  }
+  if (next.analytics || next.marketing) ensureGoogleLoaded();
+  if (next.marketing) ensureMetaLoaded();
+  applySignals(next);
+}
+
+export function grantAnalyticsConsent() {
+  setConsent({ analytics: true });
+}
+export function revokeAnalyticsConsent() {
+  setConsent({ analytics: false });
+}
+export function grantMarketingConsent() {
+  setConsent({ marketing: true });
+}
+export function revokeMarketingConsent() {
+  setConsent({ marketing: false });
+}
+export function acceptAllConsent() {
+  setConsent({ analytics: true, marketing: true });
+}
+export function acceptNecessaryOnlyConsent() {
+  setConsent({ analytics: false, marketing: false });
+}
+
+// Called once on app mount. Never fetches a script by itself — only wires
+// the dataLayer/consent-default stub and, if a return visitor already
+// decided, re-applies that decision (which does load scripts, same as a
+// fresh grant would).
 export function initAnalytics() {
-  if (!ENABLED || initialized) return;
-  initialized = true;
+  if (!ENABLED || coreInitialized) return;
+  coreInitialized = true;
 
   window.gtag = gtag;
   gtag("js", new Date());
@@ -93,51 +180,17 @@ export function initAnalytics() {
     analytics_storage: "denied",
   });
 
-  if (GA_ID) {
-    loadScript(`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`);
-    gtag("config", GA_ID, { send_page_view: false });
+  const stored = readConsent();
+  if (stored) {
+    if (stored.analytics || stored.marketing) ensureGoogleLoaded();
+    if (stored.marketing) ensureMetaLoaded();
+    applySignals(stored);
   }
-  if (ADS_ID) gtag("config", ADS_ID);
-  initMetaPixel();
-
-  if (hasStoredConsent()) grantMarketingConsent();
-}
-
-export function grantMarketingConsent() {
-  if (!ENABLED) return;
-  try {
-    localStorage.setItem(CONSENT_KEY, "granted");
-  } catch {
-    /* private mode etc. — consent just won't persist across sessions */
-  }
-  window.gtag?.("consent", "update", {
-    ad_storage: "granted",
-    ad_user_data: "granted",
-    ad_personalization: "granted",
-    analytics_storage: "granted",
-  });
-  window.fbq?.("consent", "grant");
-}
-
-export function revokeMarketingConsent() {
-  if (!ENABLED) return;
-  try {
-    localStorage.removeItem(CONSENT_KEY);
-  } catch {
-    /* ignore */
-  }
-  window.gtag?.("consent", "update", {
-    ad_storage: "denied",
-    ad_user_data: "denied",
-    ad_personalization: "denied",
-    analytics_storage: "denied",
-  });
-  window.fbq?.("consent", "revoke");
 }
 
 export function trackPageView(path: string, title: string) {
   if (!ENABLED) return;
-  if (GA_ID) {
+  if (GA_ID && hasConsent("analytics")) {
     window.gtag?.("event", "page_view", {
       page_path: path,
       // Built from the route path rather than read off window.location —
@@ -147,10 +200,11 @@ export function trackPageView(path: string, title: string) {
       page_title: title,
     });
   }
-  window.fbq?.("track", "PageView");
+  if (hasConsent("marketing")) window.fbq?.("track", "PageView");
 }
 
 function fireConversion(event: ConversionEvent) {
+  if (!hasConsent("marketing")) return;
   const label = ADS_LABELS[event];
   if (ADS_ID && label) {
     window.gtag?.("event", "conversion", { send_to: `${ADS_ID}/${label}` });
@@ -159,26 +213,26 @@ function fireConversion(event: ConversionEvent) {
 
 export function trackLeadSubmit() {
   if (!ENABLED) return;
-  window.gtag?.("event", "lead_submit");
+  if (hasConsent("analytics")) window.gtag?.("event", "lead_submit");
   fireConversion("lead_submit");
 }
 
 export function trackCallbackSubmit() {
   if (!ENABLED) return;
-  window.gtag?.("event", "callback_submit");
-  window.fbq?.("track", "Contact");
+  if (hasConsent("analytics")) window.gtag?.("event", "callback_submit");
+  if (hasConsent("marketing")) window.fbq?.("track", "Contact");
   fireConversion("callback_submit");
 }
 
 export function trackQuoteRequestSubmit() {
   if (!ENABLED) return;
-  window.gtag?.("event", "quote_request_submit");
-  window.fbq?.("track", "Lead");
+  if (hasConsent("analytics")) window.gtag?.("event", "quote_request_submit");
+  if (hasConsent("marketing")) window.fbq?.("track", "Lead");
   fireConversion("quote_request_submit");
 }
 
 export function trackPhoneClick() {
   if (!ENABLED) return;
-  window.gtag?.("event", "phone_click");
+  if (hasConsent("analytics")) window.gtag?.("event", "phone_click");
   fireConversion("phone_click");
 }

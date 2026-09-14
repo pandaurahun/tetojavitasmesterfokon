@@ -259,6 +259,19 @@ export interface Article {
   body: string[];
 }
 
+export type SocialPlatform =
+  | "facebook"
+  | "instagram"
+  | "messenger"
+  | "tiktok"
+  | "youtube"
+  | "linkedin"
+  | "whatsapp";
+
+export type SocialLinks = {
+  [K in SocialPlatform]?: string | undefined;
+};
+
 export interface Settings {
   company: string;
   contactName: string;
@@ -268,4 +281,5 @@ export interface Settings {
   taxNumber: string;
   areas: string[];
   workingHours: string;
+  socialLinks?: SocialLinks | undefined;
 }

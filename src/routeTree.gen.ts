@@ -22,6 +22,7 @@ import { Route as AdminBeallitasokRouteImport } from './routes/admin.beallitasok
 import { Route as AdminErdeklodokRouteImport } from './routes/admin.erdeklodok'
 import { Route as AdminJogiOldalakRouteImport } from './routes/admin.jogi-oldalak'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
+import { Route as AdminMarketingRouteImport } from './routes/admin.marketing'
 import { Route as AdminReferenciakRouteImport } from './routes/admin.referenciak'
 import { Route as AdminSzolgaltatasokRouteImport } from './routes/admin.szolgaltatasok'
 import { Route as AdminTartalmakRouteImport } from './routes/admin.tartalmak'
@@ -99,6 +100,11 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
   path: '/login',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminMarketingRoute = AdminMarketingRouteImport.update({
+  id: '/marketing',
+  path: '/marketing',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminReferenciakRoute = AdminReferenciakRouteImport.update({
   id: '/referenciak',
   path: '/referenciak',
@@ -168,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/admin/erdeklodok': typeof AdminErdeklodokRoute
   '/admin/jogi-oldalak': typeof AdminJogiOldalakRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/marketing': typeof AdminMarketingRoute
   '/admin/referenciak': typeof AdminReferenciakRoute
   '/admin/szolgaltatasok': typeof AdminSzolgaltatasokRoute
   '/admin/tartalmak': typeof AdminTartalmakRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/admin/erdeklodok': typeof AdminErdeklodokRoute
   '/admin/jogi-oldalak': typeof AdminJogiOldalakRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/marketing': typeof AdminMarketingRoute
   '/admin/referenciak': typeof AdminReferenciakRoute
   '/admin/szolgaltatasok': typeof AdminSzolgaltatasokRoute
   '/admin/tartalmak': typeof AdminTartalmakRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/admin/erdeklodok': typeof AdminErdeklodokRoute
   '/admin/jogi-oldalak': typeof AdminJogiOldalakRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/marketing': typeof AdminMarketingRoute
   '/admin/referenciak': typeof AdminReferenciakRoute
   '/admin/szolgaltatasok': typeof AdminSzolgaltatasokRoute
   '/admin/tartalmak': typeof AdminTartalmakRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/admin/erdeklodok'
     | '/admin/jogi-oldalak'
     | '/admin/login'
+    | '/admin/marketing'
     | '/admin/referenciak'
     | '/admin/szolgaltatasok'
     | '/admin/tartalmak'
@@ -273,6 +283,7 @@ export interface FileRouteTypes {
     | '/admin/erdeklodok'
     | '/admin/jogi-oldalak'
     | '/admin/login'
+    | '/admin/marketing'
     | '/admin/referenciak'
     | '/admin/szolgaltatasok'
     | '/admin/tartalmak'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
     | '/admin/erdeklodok'
     | '/admin/jogi-oldalak'
     | '/admin/login'
+    | '/admin/marketing'
     | '/admin/referenciak'
     | '/admin/szolgaltatasok'
     | '/admin/tartalmak'
@@ -421,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/marketing': {
+      id: '/admin/marketing'
+      path: '/marketing'
+      fullPath: '/admin/marketing'
+      preLoaderRoute: typeof AdminMarketingRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/referenciak': {
       id: '/admin/referenciak'
       path: '/referenciak'
@@ -509,6 +528,7 @@ interface AdminRouteChildren {
   AdminErdeklodokRoute: typeof AdminErdeklodokRoute
   AdminJogiOldalakRoute: typeof AdminJogiOldalakRoute
   AdminLoginRoute: typeof AdminLoginRoute
+  AdminMarketingRoute: typeof AdminMarketingRoute
   AdminReferenciakRoute: typeof AdminReferenciakRoute
   AdminSzolgaltatasokRoute: typeof AdminSzolgaltatasokRoute
   AdminTartalmakRoute: typeof AdminTartalmakRoute
@@ -524,6 +544,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminErdeklodokRoute: AdminErdeklodokRoute,
   AdminJogiOldalakRoute: AdminJogiOldalakRoute,
   AdminLoginRoute: AdminLoginRoute,
+  AdminMarketingRoute: AdminMarketingRoute,
   AdminReferenciakRoute: AdminReferenciakRoute,
   AdminSzolgaltatasokRoute: AdminSzolgaltatasokRoute,
   AdminTartalmakRoute: AdminTartalmakRoute,

@@ -1,3 +1,9 @@
 # Másold .dev.vars néven, majd adj meg legalább 32 véletlen karaktert.
 # Az éles értéket: npx wrangler secret put BOOTSTRAP_SECRET
 BOOTSTRAP_SECRET="replace-with-a-long-random-secret"
+
+# Opcionális — csak az "AI ajánlatjavaslat" és "Social Content Assistant"
+# funkciókhoz kell. Nélküle ez a két funkció egyszerűen nem elérhető, minden
+# más változatlanul működik. Éles beállítás: npx wrangler secret put AI_API_KEY
+# AI_PROVIDER="anthropic"
+# AI_API_KEY="replace-with-a-real-api-key"

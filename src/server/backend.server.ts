@@ -6,7 +6,7 @@ import {
   type DemoState,
   type SiteState,
 } from "@/demo/default-state";
-import { articles } from "@/demo/data";
+import { articles, priceBook } from "@/demo/data";
 import { quoteTotals } from "@/demo/calc";
 import type { Lead, Quote } from "@/demo/types";
 import {
@@ -17,6 +17,7 @@ import {
   loginSchema,
   siteStateSchema,
 } from "./validation.server";
+import { getAIProvider, generateQuoteDraft, generateSocialPost } from "./ai.server";
 
 const SESSION_COOKIE = "tetomester_session";
 const HOST_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`;
@@ -478,6 +479,64 @@ async function changePassword(request: Request, workerEnv: Env): Promise<Respons
   return json({ ok: true });
 }
 
+async function aiQuoteDraft(request: Request, workerEnv: Env): Promise<Response> {
+  if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
+  if (!(await authenticate(request, workerEnv))) {
+    return apiError(401, "Bejelentkezés szükséges.");
+  }
+  const provider = getAIProvider(workerEnv);
+  if (!provider) return apiError(501, "Az AI asszisztens nincs beállítva ezen a szerveren.");
+
+  const body = (await readJson(request, 4_096)) as { leadId?: unknown };
+  const leadId = typeof body.leadId === "string" ? body.leadId : "";
+  if (!leadId) return apiError(400, "Hiányzó leadId.");
+
+  const state = await loadState(workerEnv);
+  const lead = state.leads.find((l) => l.id === leadId);
+  if (!lead) return apiError(404, "A lead nem található.");
+
+  try {
+    const draft = await generateQuoteDraft(provider, {
+      lead,
+      priceBook,
+      companyName: state.settings.company || "a vállalkozás",
+      priorNotes: lead.notes.map((n) => `${n.date} — ${n.text}`),
+    });
+    return json(draft);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "ai_quote_draft_failed", message: String(error) }));
+    return apiError(502, "Az AI ajánlatjavaslat generálása nem sikerült.");
+  }
+}
+
+async function aiSocialPost(request: Request, workerEnv: Env): Promise<Response> {
+  if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
+  if (!(await authenticate(request, workerEnv))) {
+    return apiError(401, "Bejelentkezés szükséges.");
+  }
+  const provider = getAIProvider(workerEnv);
+  if (!provider) return apiError(501, "Az AI asszisztens nincs beállítva ezen a szerveren.");
+
+  const body = (await readJson(request, 4_096)) as { projectId?: unknown };
+  const projectId = typeof body.projectId === "string" ? body.projectId : "";
+  if (!projectId) return apiError(400, "Hiányzó projectId.");
+
+  const state = await loadState(workerEnv);
+  const project = state.projects.find((p) => p.id === projectId);
+  if (!project) return apiError(404, "A referencia nem található.");
+
+  try {
+    const draft = await generateSocialPost(provider, {
+      project,
+      companyName: state.settings.company || "a vállalkozás",
+    });
+    return json(draft);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "ai_social_post_failed", message: String(error) }));
+    return apiError(502, "A social poszt-javaslat generálása nem sikerült.");
+  }
+}
+
 function mediaKey(pathname: string): string | null {
   const encoded = pathname.slice("/api/media/".length);
   let key: string;
@@ -657,6 +716,12 @@ export async function handleBackendRequest(
     }
     if (request.method === "PUT" && url.pathname === "/api/admin/password") {
       return await changePassword(request, runtimeEnv);
+    }
+    if (request.method === "POST" && url.pathname === "/api/admin/ai/quote-draft") {
+      return await aiQuoteDraft(request, runtimeEnv);
+    }
+    if (request.method === "POST" && url.pathname === "/api/admin/ai/social-post") {
+      return await aiSocialPost(request, runtimeEnv);
     }
     return apiError(404, "Az API-végpont nem található.");
   } catch (error) {

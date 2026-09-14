@@ -1,13 +1,26 @@
 import { Link } from "@tanstack/react-router";
-import { Phone, Mail, MapPin } from "lucide-react";
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Facebook,
+  Instagram,
+  Youtube,
+  Linkedin,
+  MessageCircle,
+  Music2,
+} from "lucide-react";
+import type { SocialLinks, SocialPlatform } from "@/demo/types";
 import { useCmsSection, useDemo } from "@/demo/store";
 import { demoUiEnabled } from "@/lib/features";
 import { trackPhoneClick } from "@/lib/analytics";
+import { useConsentSettings } from "./ConsentBanner";
 import { Mark } from "./Header";
 
 export function Footer() {
   const { settings, services, branding } = useDemo();
   const { section, value } = useCmsSection("global.footer");
+  const { open: openConsentSettings } = useConsentSettings();
 
   if (section && !section.visible) return null;
 
@@ -79,6 +92,7 @@ export function Footer() {
             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {settings.address}
           </span>
           <span className="block pt-2 text-xs opacity-70">{settings.workingHours}</span>
+          <SocialLinksRow links={settings.socialLinks} />
         </FooterCol>
       </div>
 
@@ -108,10 +122,47 @@ export function Footer() {
             >
               Cookie
             </Link>
+            <button type="button" onClick={openConsentSettings} className="hover:text-accent">
+              Süti beállítások
+            </button>
           </div>
         </div>
       </div>
     </footer>
+  );
+}
+
+const SOCIAL_ICONS: Record<SocialPlatform, React.ComponentType<{ className?: string }>> = {
+  facebook: Facebook,
+  instagram: Instagram,
+  messenger: MessageCircle,
+  tiktok: Music2,
+  youtube: Youtube,
+  linkedin: Linkedin,
+  whatsapp: MessageCircle,
+};
+
+function SocialLinksRow({ links }: { links: SocialLinks | undefined }) {
+  const entries = Object.entries(links ?? {}).filter(([, href]) => href) as [SocialPlatform, string][];
+  if (!entries.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 pt-2">
+      {entries.map(([platform, href]) => {
+        const Icon = SOCIAL_ICONS[platform];
+        return (
+          <a
+            key={platform}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={platform}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[color-mix(in_oklab,white_16%,transparent)] hover:border-accent hover:text-accent"
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </a>
+        );
+      })}
+    </div>
   );
 }
 

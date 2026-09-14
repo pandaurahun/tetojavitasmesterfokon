@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Pencil,
   Plus,
+  Sparkles,
   Star,
   Trash2,
   Upload,
@@ -520,6 +521,11 @@ function ProjectsAdmin() {
                       onClick={() => setEditing(structuredClone(project))}
                     >
                       <Pencil /> Szerkesztés
+                    </Button>
+                    <Button asChild size="sm" variant="ghost">
+                      <Link to="/admin/marketing" search={{ projectId: project.id }}>
+                        <Sparkles /> Social poszt
+                      </Link>
                     </Button>
                     <Button
                       size="icon"
