@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tetojavitasmesterfokon",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2026-08-31",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "routes": [
+    {
+      "pattern": "tetojavitasmesterfokon.hu",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "www.tetojavitasmesterfokon.hu",
+      "custom_domain": true,
+    },
+  ],
+  "secrets": {
+    "required": ["BOOTSTRAP_SECRET"],
+  },
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.mjs", "**/*.js"],
+    },
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".output/public",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tetojavitasmesterfokon",
+      "database_id": "b69a8146-6892-4b2c-b442-609e8ab7a598",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "tetojavitasmesterfokon-media",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+    },
+  },
+}

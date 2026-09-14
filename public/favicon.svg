@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TetőVonal tető ikon">
+  <rect width="64" height="64" rx="14" fill="#111820"/>
+  <path d="M11 33 32 15l21 18" fill="none" stroke="#C47743" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 32v17h28V32L32 20Z" fill="#F5F1E8"/>
+  <path d="M27 49V37h10v12" fill="#25473D"/>
+  <path d="m11 33 21-18 21 18" fill="none" stroke="#C47743" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

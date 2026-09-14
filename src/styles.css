@@ -1,0 +1,217 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * TetőVonal design system — architectural premium palette.
+ * All runtime-editable tokens live on :root and are overridden by the
+ * branding editor (see src/demo/store.tsx) via inline style properties.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  --font-display: var(--font-heading);
+  --font-sans: var(--font-body);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-copper: var(--accent);
+  --color-forest: var(--forest);
+  --color-forest-foreground: var(--forest-foreground);
+  --color-slate-cool: var(--slate-cool);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-soft: 0 1px 2px oklch(0.19 0.017 250 / calc(0.06 * var(--shadow-strength))),
+    0 8px 24px -12px oklch(0.19 0.017 250 / calc(0.22 * var(--shadow-strength)));
+  --shadow-lift: 0 2px 4px oklch(0.19 0.017 250 / calc(0.05 * var(--shadow-strength))),
+    0 24px 60px -24px oklch(0.19 0.017 250 / calc(0.3 * var(--shadow-strength)));
+}
+
+:root {
+  --radius: 0.5rem;
+  --radius-button: 0.5rem;
+  --radius-card: 1rem;
+  --shadow-strength: 1;
+  --section-space: 1;
+  --motion-scale: 1;
+
+  --font-heading: "Sora", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* graphite #111820 */
+  --primary: #111820;
+  --primary-foreground: #fcfaf6;
+  /* copper #C47743 */
+  --accent: #c47743;
+  --accent-foreground: #14100c;
+  /* ivory #F5F1E8 */
+  --background: #f5f1e8;
+  --foreground: #111820;
+  /* off-white #FCFAF6 */
+  --surface: #fcfaf6;
+  --card: #fcfaf6;
+  --card-foreground: #111820;
+  --popover: #fcfaf6;
+  --popover-foreground: #111820;
+  --secondary: #e8e2d4;
+  --secondary-foreground: #111820;
+  --muted: #eae5d9;
+  --muted-foreground: #66717d;
+  /* slate #66717D */
+  --slate-cool: #66717d;
+  /* forest #25473D */
+  --forest: #25473d;
+  --forest-foreground: #eef4f1;
+  --ink: #111820;
+  --ink-foreground: #f5f1e8;
+  --destructive: oklch(0.55 0.19 27);
+  --destructive-foreground: #fcfaf6;
+  --border: color-mix(in oklab, var(--primary) 14%, transparent);
+  --input: color-mix(in oklab, var(--primary) 20%, transparent);
+  --ring: var(--accent);
+
+  --chart-1: var(--accent);
+  --chart-2: var(--forest);
+  --chart-3: var(--slate-cool);
+  --chart-4: #9c6b3f;
+  --chart-5: #3c6b5c;
+
+  --sidebar: #111820;
+  --sidebar-foreground: #d9d3c6;
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #14100c;
+  --sidebar-accent: color-mix(in oklab, #ffffff 8%, transparent);
+  --sidebar-accent-foreground: #fcfaf6;
+  --sidebar-border: color-mix(in oklab, #ffffff 10%, transparent);
+  --sidebar-ring: var(--accent);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+}
+
+@utility text-balance-tight {
+  text-wrap: balance;
+  hyphens: auto;
+}
+
+@utility label-eyebrow {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+@utility surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+}
+
+@utility hairline-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--primary) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--primary) 7%, transparent) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+@utility section-pad {
+  padding-block: calc(5rem * var(--section-space));
+  @media (min-width: 1024px) {
+    padding-block: calc(7rem * var(--section-space));
+  }
+}
+
+@utility copper-underline {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0.08em;
+    height: 0.14em;
+    background: color-mix(in oklab, var(--accent) 55%, transparent);
+    border-radius: 999px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
