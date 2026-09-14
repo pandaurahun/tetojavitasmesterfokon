@@ -16,7 +16,9 @@ export interface AIProvider {
 }
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+// gemini-2.5-flash is closed to new API keys as of this writing; Google's
+// own API error points new callers to gemini-3.6-flash instead.
+const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 
 // Default provider — has a free API tier, so the AI features don't require
 // a paid key to try out. Switch to Anthropic any time by setting the

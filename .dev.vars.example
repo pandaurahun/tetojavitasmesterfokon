@@ -8,5 +8,5 @@ BOOTSTRAP_SECRET="replace-with-a-long-random-secret"
 # Alapértelmezett provider: Google Gemini (ingyenes API tier, AI Studio-ból kérhető kulcs).
 # AI_PROVIDER="gemini"
 # AI_API_KEY="replace-with-a-real-gemini-api-key"
-# AI_MODEL="gemini-2.5-flash"
+# AI_MODEL="gemini-3.6-flash"
 # Váltás Anthropicra: AI_PROVIDER="anthropic", AI_API_KEY=Anthropic-kulcs.
