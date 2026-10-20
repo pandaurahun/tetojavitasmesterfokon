@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   getConsentState,
+  isSensitivePath,
   acceptAllConsent,
   acceptNecessaryOnlyConsent,
   grantAnalyticsConsent,
@@ -23,7 +24,11 @@ export const useConsentSettings = () => useContext(ConsentSettingsContext);
 
 export function ConsentProvider({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
+  // No banner where no cookie-based tracking runs at all: the admin area, and
+  // the secure customer quote link (a transactional page whose fixed footer
+  // banner would also cover the signature buttons on a phone).
+  const isAdmin =
+    pathname === "/admin" || pathname.startsWith("/admin/") || isSensitivePath(pathname);
   const [visible, setVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [analytics, setAnalytics] = useState(false);

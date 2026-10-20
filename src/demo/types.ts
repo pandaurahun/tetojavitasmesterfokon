@@ -19,7 +19,13 @@ export interface DemoFile {
   name: string;
   size: number;
   kind: "kep" | "dokumentum";
+  // Local-preview-only, stripped before the lead is ever persisted — see url.
   dataUrl?: string | undefined;
+  // The real, server-stored location (set once the background upload in the
+  // wizard succeeds) — this is what actually survives into the saved lead
+  // and what the admin lead view renders. May be absent if the upload
+  // failed or was still in flight when the visitor submitted.
+  url?: string | undefined;
 }
 
 export interface TimelineEntry {

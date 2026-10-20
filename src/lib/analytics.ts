@@ -14,14 +14,25 @@ const ADS_LABELS: Record<ConversionEvent, string | undefined> = {
   lead_submit: import.meta.env["VITE_GOOGLE_ADS_LABEL_LEAD_SUBMIT"] as string | undefined,
   callback_submit: import.meta.env["VITE_GOOGLE_ADS_LABEL_CALLBACK_SUBMIT"] as string | undefined,
   quote_request_submit: import.meta.env["VITE_GOOGLE_ADS_LABEL_QUOTE_REQUEST_SUBMIT"] as
-    | string
-    | undefined,
+    string | undefined,
   phone_click: import.meta.env["VITE_GOOGLE_ADS_LABEL_PHONE_CLICK"] as string | undefined,
 };
 
 const ENABLED = import.meta.env.PROD;
 const CONSENT_KEY = "consent_v1";
 const SITE_ORIGIN = "https://tetojavitasmesterfokon.hu";
+
+// Path prefixes that carry a secret bearer token in the URL itself (a
+// field-quote's public sign/decide-later link is the only one today, but
+// any future capability-URL route belongs here too). The token is the
+// ENTIRE access control for that customer's private quote — viewing AND
+// signing/declining it — so it must never be sent to GA4/Meta, which would
+// hand it to anyone with dashboard access (e.g. a marketing freelancer).
+const SENSITIVE_PATH_PREFIXES = ["/ajanlat/"];
+
+export function isSensitivePath(path: string): boolean {
+  return SENSITIVE_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
 
 type ConversionEvent = "lead_submit" | "callback_submit" | "quote_request_submit" | "phone_click";
 
@@ -72,13 +83,26 @@ function loadScript(src: string) {
   document.head.appendChild(script);
 }
 
-function gtag(...args: unknown[]) {
+// Must push the real `arguments` object, not a rest-param array — gtag.js's
+// own command parser expects arguments-shaped entries (this is Google's
+// literal canonical snippet); a genuine Array is processed differently and
+// silently never reaches the point of sending an actual collect request.
+// eslint-disable-next-line prefer-rest-params
+function gtag(..._args: unknown[]) {
   window.dataLayer = window.dataLayer ?? [];
-  window.dataLayer.push(args);
+  // eslint-disable-next-line prefer-rest-params
+  window.dataLayer.push(arguments);
 }
 
 function ensureGoogleLoaded() {
   if (googleLoaded || (!GA_ID && !ADS_ID)) return;
+  // Belt-and-suspenders: the googleLoaded flag is a correct, synchronous
+  // guard on its own, but also check the DOM in case anything outside this
+  // module's control ever ends up calling in twice.
+  if (document.querySelector('script[src*="googletagmanager.com/gtag/js"]')) {
+    googleLoaded = true;
+    return;
+  }
   googleLoaded = true;
   loadScript(`https://www.googletagmanager.com/gtag/js?id=${GA_ID ?? ADS_ID}`);
   if (GA_ID) gtag("config", GA_ID, { send_page_view: false });
@@ -139,9 +163,19 @@ function setConsent(partial: Partial<Pick<ConsentState, "analytics" | "marketing
   } catch {
     /* private mode etc. — consent just won't persist across sessions */
   }
+  // Consent signal must land in the dataLayer BEFORE config/init — gtag
+  // processes commands strictly in order, so a config queued while consent
+  // is still "default" (denied) initializes in denied mode, and a later
+  // update can't retroactively fix that already-processed command.
+  applySignals(next);
   if (next.analytics || next.marketing) ensureGoogleLoaded();
   if (next.marketing) ensureMetaLoaded();
-  applySignals(next);
+  // The page the visitor is already on never got its page_view sent — the
+  // initial mount's attempt ran before consent existed and was correctly
+  // (silently) skipped. Send it now, for the current URL, so that pageview
+  // isn't lost. Route-change navigations after this remain covered by the
+  // pathname effect in __root.tsx as before.
+  trackPageView(window.location.pathname, document.title);
 }
 
 export function grantAnalyticsConsent() {
@@ -190,6 +224,12 @@ export function initAnalytics() {
 
 export function trackPageView(path: string, title: string) {
   if (!ENABLED) return;
+  // Meta's fbevents.js auto-captures document.location.href on its own for
+  // every PageView, regardless of what's passed here — so redacting the
+  // token out of `path` would only fix the GA4 call below and still leak it
+  // via Meta. Skipping the pageview entirely for this route is the only fix
+  // that actually covers both.
+  if (isSensitivePath(path)) return;
   if (GA_ID && hasConsent("analytics")) {
     window.gtag?.("event", "page_view", {
       page_path: path,

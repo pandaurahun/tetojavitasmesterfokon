@@ -1,5 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
@@ -25,6 +35,7 @@ import { urgencyLabels } from "@/demo/data";
 import type { CustomField, DemoFile, Lead, Urgency } from "@/demo/types";
 import { demoUiEnabled } from "@/lib/features";
 import { trackQuoteRequestSubmit } from "@/lib/analytics";
+import { clearSubmissionId, submissionId } from "@/lib/submission-id";
 
 export const Route = createFileRoute("/ajanlatkeres")({
   validateSearch: (
@@ -191,6 +202,33 @@ function QuoteWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  // React state updates are async, so two clicks in the same tick would both
+  // see `submitting === false`; the ref closes that gap.
+  const submittingRef = useRef(false);
+  // Photos upload in the background while the visitor keeps going. Their
+  // state lives here (not in the file step) so leaving the step doesn't lose
+  // it, and so the final submit can wait for photos still on their way.
+  const [uploadState, setUploadState] = useState<UploadStates>({});
+  const pendingFiles = useRef(new Map<string, File>());
+  const updateFiles = useCallback(
+    (updater: (prev: DemoFile[]) => DemoFile[]) =>
+      setForm((prev) => ({ ...prev, files: updater(prev.files) })),
+    [],
+  );
+  const uploadingCount = Object.values(uploadState).filter((s) => s === "uploading").length;
+  const failedCount = Object.values(uploadState).filter((s) => s === "failed").length;
+
+  // Preview object URLs are released when the wizard goes away.
+  const formRef = useRef<WizardForm | null>(null);
+  formRef.current = form;
+  useEffect(
+    () => () => {
+      for (const f of formRef.current?.files ?? []) {
+        if (f.dataUrl?.startsWith("blob:")) URL.revokeObjectURL(f.dataUrl);
+      }
+    },
+    [],
+  );
 
   // Restore saved draft (client only, no hydration mismatch).
   useEffect(() => {
@@ -198,7 +236,12 @@ function QuoteWizard() {
       const raw = window.localStorage.getItem(WIZ_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<WizardForm> & { step?: number };
-        setForm((prev) => ({ ...prev, ...parsed, consent: false }));
+        setForm((prev) => ({
+          ...prev,
+          ...parsed,
+          files: persistableFiles(Array.isArray(parsed.files) ? parsed.files : []),
+          consent: false,
+        }));
         if (!search.lepes && parsed.step) setStep(Math.min(Math.max(parsed.step, 1), 8));
       }
     } catch {
@@ -214,7 +257,12 @@ function QuoteWizard() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      window.localStorage.setItem(WIZ_KEY, JSON.stringify({ ...form, step }));
+      // Without the photo previews: a few of them would overflow localStorage's
+      // quota and then NOTHING (not even the typed answers) would be kept.
+      window.localStorage.setItem(
+        WIZ_KEY,
+        JSON.stringify({ ...form, files: persistableFiles(form.files), step }),
+      );
     } catch {
       /* tárolási korlát esetén memóriában marad */
     }
@@ -276,9 +324,28 @@ function QuoteWizard() {
   const back = () => goTo(Math.max(step - 1, 1));
 
   const submit = async () => {
+    if (submittingRef.current || uploadingCount > 0) return;
     if (!validate(8)) return;
+    // The same id for every retry of THIS request (refresh, double click, a
+    // response lost on a bad connection) so the server stores it once; it
+    // changes only when the content does, and is cleared on success.
+    const leadId = submissionId("wizard", [
+      form.name.trim(),
+      form.phone.trim(),
+      form.email.trim(),
+      form.city.trim(),
+      form.zip.trim(),
+      form.street.trim(),
+      form.service,
+      form.buildingType,
+      form.urgency,
+      form.message.trim(),
+      form.area,
+      form.shape,
+      form.files.length,
+    ]);
     const lead: Lead = {
-      id: newId("lead"),
+      id: leadId,
       createdAt: new Date().toISOString(),
       name: form.name.trim(),
       phone: form.phone.trim(),
@@ -318,11 +385,14 @@ function QuoteWizard() {
       ],
       extra: Object.keys(form.extra).length ? form.extra : undefined,
     };
+    submittingRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await addLead(lead);
-      trackQuoteRequestSubmit();
+      const { duplicate } = await addLead(lead);
+      // A recognised repeat was already counted the first time.
+      if (!duplicate) trackQuoteRequestSubmit();
+      clearSubmissionId("wizard");
       try {
         window.localStorage.removeItem(WIZ_KEY);
       } catch {
@@ -335,6 +405,7 @@ function QuoteWizard() {
         "Az ajánlatkérés mentése nem sikerült. Kérjük, próbáld újra, vagy keress minket telefonon.",
       );
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -612,7 +683,15 @@ function QuoteWizard() {
                   </div>
                 )}
 
-                {step === 6 && <FileStep files={form.files} setFiles={(f) => set("files", f)} />}
+                {step === 6 && (
+                  <FileStep
+                    files={form.files}
+                    updateFiles={updateFiles}
+                    uploadState={uploadState}
+                    setUploadState={setUploadState}
+                    pending={pendingFiles}
+                  />
+                )}
 
                 {step === 7 && (
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -715,10 +794,22 @@ function QuoteWizard() {
                   {submitError}
                 </p>
               ) : null}
-              <Button variant="copper" onClick={() => void submit()} disabled={submitting}>
+              {failedCount > 0 ? (
+                <p role="status" className="mb-2 max-w-md text-left text-xs text-destructive">
+                  {failedCount} kép feltöltése nem sikerült — ezekből csak a fájlnév jut el hozzánk.
+                  A 6. lépésben újrapróbálhatod, vagy beküldheted így is.
+                </p>
+              ) : null}
+              <Button
+                variant="copper"
+                onClick={() => void submit()}
+                disabled={submitting || uploadingCount > 0}
+              >
                 {submitting
                   ? value("submitting", "Mentés…")
-                  : value("submit", "Ajánlatkérés beküldése")}{" "}
+                  : uploadingCount > 0
+                    ? "Képek feltöltése…"
+                    : value("submit", "Ajánlatkérés beküldése")}{" "}
                 <Check />
               </Button>
             </div>
@@ -729,6 +820,14 @@ function QuoteWizard() {
   );
 }
 
+type ControlProps = { id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean };
+const isTextControl = (node: React.ReactNode): node is React.ReactElement<ControlProps> =>
+  isValidElement(node) && (node.type === Input || node.type === Textarea || node.type === "select");
+
+// A visible label is not a label to assistive technology unless it is linked
+// to its control. A text input / textarea / select child is linked with
+// for/id (and told about its error message); anything else — a group of
+// chips — becomes a labelled group instead.
 function WField({
   label,
   error,
@@ -740,18 +839,43 @@ function WField({
   children: React.ReactNode;
   className?: string;
 }) {
+  const baseId = useId();
+  const labelId = `${baseId}-label`;
+  const errorId = error ? `${baseId}-error` : undefined;
+  const hasControl = Children.toArray(children).some(isTextControl);
+  const content = Children.map(children, (node) =>
+    isTextControl(node)
+      ? cloneElement(node, {
+          id: node.props.id ?? baseId,
+          ...(errorId ? { "aria-invalid": true, "aria-describedby": errorId } : {}),
+        })
+      : node,
+  );
   return (
-    <div className={`space-y-2 ${className}`}>
-      <Label className="text-xs font-semibold text-muted-foreground">{label}</Label>
-      {children}
-      <FieldError msg={error} />
+    <div
+      className={`space-y-2 ${className}`}
+      {...(hasControl ? {} : { role: "group", "aria-labelledby": labelId })}
+    >
+      <Label
+        id={labelId}
+        htmlFor={hasControl ? baseId : undefined}
+        className="text-xs font-semibold text-muted-foreground"
+      >
+        {label}
+      </Label>
+      {content}
+      <FieldError msg={error} id={errorId} />
     </div>
   );
 }
 
-function FieldError({ msg }: { msg?: string | undefined }) {
+function FieldError({ msg, id }: { msg?: string | undefined; id?: string | undefined }) {
   if (!msg) return null;
-  return <p className="text-xs font-medium text-destructive">{msg}</p>;
+  return (
+    <p id={id} role="alert" className="text-xs font-medium text-destructive">
+      {msg}
+    </p>
+  );
 }
 
 function ChipGroup({
@@ -858,33 +982,141 @@ function CustomFieldInput({
   );
 }
 
-function FileStep({ files, setFiles }: { files: DemoFile[]; setFiles: (f: DemoFile[]) => void }) {
-  const [drag, setDrag] = useState(false);
+const UPLOADABLE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
+const MAX_WIZARD_FILES = 10; // the server accepts at most 10 files per request
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // the public upload endpoint's limit
+const MAX_DOCUMENT_BYTES = 20_000_000; // the lead schema's per-file size limit
 
-  const handle = (list: FileList | null) => {
-    if (!list) return;
-    const incoming = Array.from(list).slice(0, 10);
-    incoming.forEach((file) => {
-      const isImage = file.type.startsWith("image/");
-      const base: DemoFile = {
-        id: newId("file"),
-        name: file.name,
-        size: file.size,
-        kind: isImage ? "kep" : "dokumentum",
-      };
-      if (isImage && file.size < 900_000) {
-        const reader = new FileReader();
-        reader.onload = () =>
-          setFiles([...(filesRef.current ?? []), { ...base, dataUrl: String(reader.result) }]);
-        reader.readAsDataURL(file);
+type UploadState = "uploading" | "failed";
+type UploadStates = Record<string, UploadState>;
+
+// Resolves to the stored photo's URL, or a message that can be shown to the
+// visitor — never throws, so one bad photo can't break the wizard.
+async function uploadLeadPhoto(file: File): Promise<{ url: string } | { error: string }> {
+  try {
+    const res = await fetch("/api/leads/media", {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    const body = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+    if (res.ok && body?.url) return { url: body.url };
+    if (res.status === 429) {
+      return { error: "Túl sok feltöltés rövid idő alatt — próbáld újra pár perc múlva." };
+    }
+    return { error: body?.error ?? "A feltöltés nem sikerült." };
+  } catch {
+    return { error: "A feltöltés megszakadt — ellenőrizd a kapcsolatot." };
+  }
+}
+
+// Draft persistence keeps only what survives a refresh: documents (filename
+// only, by design) and photos that actually reached the server. A photo that
+// never uploaded has no binary left after a reload, so it can't be sent.
+function persistableFiles(files: DemoFile[]): DemoFile[] {
+  return files
+    .filter((f) => f.url || f.kind === "dokumentum")
+    .map(({ dataUrl: _preview, ...rest }) => rest);
+}
+
+function FileStep({
+  files,
+  updateFiles,
+  uploadState,
+  setUploadState,
+  pending,
+}: {
+  files: DemoFile[];
+  updateFiles: (updater: (prev: DemoFile[]) => DemoFile[]) => void;
+  uploadState: UploadStates;
+  setUploadState: (updater: (prev: UploadStates) => UploadStates) => void;
+  /** The browser-side File objects of photos still uploading or failed (for retry). */
+  pending: React.RefObject<Map<string, File>>;
+}) {
+  const [drag, setDrag] = useState(false);
+  const [notices, setNotices] = useState<string[]>([]);
+  const filesRef = useRef<DemoFile[]>(files);
+  filesRef.current = files;
+
+  const startUpload = (id: string, file: File) => {
+    pending.current?.set(id, file);
+    setUploadState((s) => ({ ...s, [id]: "uploading" }));
+    void uploadLeadPhoto(file).then((result) => {
+      if ("url" in result) {
+        pending.current?.delete(id);
+        // A functional update: another photo may have been added or removed
+        // while this one was in flight — a stale snapshot would undo that.
+        updateFiles((prev) => prev.map((f) => (f.id === id ? { ...f, url: result.url } : f)));
+        setUploadState((s) => {
+          const { [id]: _done, ...rest } = s;
+          return rest;
+        });
       } else {
-        setFiles([...(filesRef.current ?? []), base]);
+        setUploadState((s) => ({ ...s, [id]: "failed" }));
+        setNotices((n) => [...n, `${file.name}: ${result.error}`]);
       }
     });
   };
 
-  const filesRef = useRef<DemoFile[]>(files);
-  filesRef.current = files;
+  const handle = (list: FileList | null) => {
+    if (!list) return;
+    const problems: string[] = [];
+    const accepted: { entry: DemoFile; file: File | null }[] = [];
+    let room = MAX_WIZARD_FILES - filesRef.current.length;
+
+    for (const file of Array.from(list)) {
+      const isImage = file.type.startsWith("image/");
+      if (room <= 0) {
+        problems.push(`${file.name}: legfeljebb ${MAX_WIZARD_FILES} fájlt csatolhatsz.`);
+        continue;
+      }
+      if (isImage && !UPLOADABLE_TYPES.has(file.type)) {
+        problems.push(`${file.name}: csak JPEG, PNG, WebP vagy AVIF kép tölthető fel.`);
+        continue;
+      }
+      if (isImage && file.size > MAX_PHOTO_BYTES) {
+        problems.push(`${file.name}: a kép legfeljebb 8 MB lehet.`);
+        continue;
+      }
+      if (!isImage && file.size > MAX_DOCUMENT_BYTES) {
+        problems.push(`${file.name}: a dokumentum legfeljebb 20 MB lehet.`);
+        continue;
+      }
+      room -= 1;
+      accepted.push({
+        entry: {
+          id: newId("file"),
+          name: file.name,
+          size: file.size,
+          kind: isImage ? "kep" : "dokumentum",
+          // A local preview of any size (an object URL, not a base64 copy in
+          // memory); it is never sent or stored.
+          ...(isImage ? { dataUrl: URL.createObjectURL(file) } : {}),
+        },
+        file: isImage ? file : null,
+      });
+    }
+
+    setNotices(problems);
+    if (accepted.length === 0) return;
+    updateFiles((prev) => [...prev, ...accepted.map((a) => a.entry)]);
+    for (const { entry, file } of accepted) if (file) startUpload(entry.id, file);
+  };
+
+  const retry = (id: string) => {
+    const file = pending.current?.get(id);
+    if (file) startUpload(id, file);
+  };
+
+  const remove = (f: DemoFile) => {
+    if (f.dataUrl?.startsWith("blob:")) URL.revokeObjectURL(f.dataUrl);
+    pending.current?.delete(f.id);
+    setUploadState((s) => {
+      const { [f.id]: _gone, ...rest } = s;
+      return rest;
+    });
+    updateFiles((prev) => prev.filter((x) => x.id !== f.id));
+  };
 
   return (
     <div className="space-y-5">
@@ -910,51 +1142,98 @@ function FileStep({ files, setFiles }: { files: DemoFile[]; setFiles: (f: DemoFi
           Húzd ide a képeket, vagy kattints a tallózáshoz
         </span>
         <span className="max-w-md text-xs text-muted-foreground">
-          Fénykép a beázás helyéről, a tetőről kívülről, a padlástérről belülről. Dokumentum is
-          feltölthető: terv, korábbi ajánlat, kárfelvételi jegyzőkönyv. A fájlok jelenleg csak a
-          helyi előnézetben szerepelnek, beküldéskor nem továbbítjuk őket.
+          Fénykép a beázás helyéről, a tetőről kívülről, a padlástérről belülről (JPEG, PNG, WebP
+          vagy AVIF, képenként legfeljebb 8 MB, összesen legfeljebb {MAX_WIZARD_FILES} fájl).
+          Dokumentum is csatolható: terv, korábbi ajánlat, kárfelvételi jegyzőkönyv — ezeknél
+          egyelőre csak a fájlnevet kapjuk meg, a képek viszont a feltöltéskor automatikusan
+          elküldésre kerülnek hozzánk.
         </span>
         <input
           type="file"
           multiple
-          accept="image/*,.pdf,.doc,.docx"
+          accept="image/jpeg,image/png,image/webp,image/avif,.pdf,.doc,.docx"
           className="hidden"
-          onChange={(e) => handle(e.target.files)}
+          onChange={(e) => {
+            // Copy the FileList before clearing the input: the same file can
+            // then be picked again (e.g. to retry after a refusal).
+            const picked = e.target.files;
+            handle(picked);
+            e.target.value = "";
+          }}
         />
       </label>
 
+      {notices.length > 0 ? (
+        <ul role="alert" className="space-y-1 text-xs text-destructive">
+          {notices.map((n, i) => (
+            <li key={`${n}-${i}`}>{n}</li>
+          ))}
+        </ul>
+      ) : null}
+
       {files.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          {files.map((f) => (
-            <div
-              key={f.id}
-              className="group relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface"
-            >
-              {f.dataUrl ? (
-                <img src={f.dataUrl} alt={f.name} className="h-32 w-full object-cover" />
-              ) : (
-                <div className="flex h-32 items-center justify-center bg-muted">
-                  {f.kind === "kep" ? (
-                    <ImageIcon className="h-8 w-8 text-muted-foreground" />
-                  ) : (
-                    <FileText className="h-8 w-8 text-muted-foreground" />
-                  )}
+          {files.map((f) => {
+            const state = uploadState[f.id];
+            const preview = f.dataUrl ?? f.url;
+            return (
+              <div
+                key={f.id}
+                className="group relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface"
+              >
+                {preview ? (
+                  <img src={preview} alt={f.name} className="h-32 w-full object-cover" />
+                ) : (
+                  <div className="flex h-32 items-center justify-center bg-muted">
+                    {f.kind === "kep" ? (
+                      <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                    ) : (
+                      <FileText className="h-8 w-8 text-muted-foreground" />
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-2 p-2.5">
+                  <div className="min-w-0">
+                    <span className="block truncate text-xs" title={f.name}>
+                      {f.name}
+                    </span>
+                    <span
+                      className={`block text-[11px] ${
+                        state === "failed" ? "text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      {state === "uploading"
+                        ? "Feltöltés…"
+                        : state === "failed"
+                          ? "Nem sikerült feltölteni"
+                          : f.url
+                            ? "Feltöltve ✓"
+                            : "Csak a fájlnév kerül elküldésre"}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    {state === "failed" && pending.current?.has(f.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => retry(f.id)}
+                        className="rounded-full px-2 py-1 text-[11px] font-semibold text-accent hover:bg-muted"
+                      >
+                        Újra
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => remove(f)}
+                      aria-label={`${f.name} törlése`}
+                      className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-              )}
-              <div className="flex items-center justify-between gap-2 p-2.5">
-                <span className="truncate text-xs" title={f.name}>
-                  {f.name}
-                </span>
-                <button
-                  onClick={() => setFiles(files.filter((x) => x.id !== f.id))}
-                  aria-label={`${f.name} törlése`}
-                  className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">

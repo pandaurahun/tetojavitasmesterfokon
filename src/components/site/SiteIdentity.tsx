@@ -14,7 +14,8 @@ function faviconType(url: string): string | undefined {
     return "image/png";
   }
   if (
-    url.startsWith("data:image/(?:x-icon|vnd\.microsoft\.icon)") ||
+    url.startsWith("data:image/x-icon") ||
+    url.startsWith("data:image/vnd.microsoft.icon") ||
     /\.ico(?:$|[?#])/i.test(url)
   ) {
     return "image/x-icon";

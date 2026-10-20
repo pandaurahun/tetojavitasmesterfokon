@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Database exports and the local test-admin SQL hold personal data and password hashes - never commit them
+backup-*.sql
+local-admin.sql

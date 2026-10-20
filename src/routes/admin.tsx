@@ -18,8 +18,12 @@ import {
   ArrowLeft,
   LogOut,
   LoaderCircle,
+  FileSignature,
+  HardHat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useKiosk } from "@/components/admin/kiosk-context";
+import { KioskProvider } from "@/components/admin/KioskProvider";
 import { useDemo } from "@/demo/store";
 
 export const Route = createFileRoute("/admin")({
@@ -44,6 +48,8 @@ export const adminNav = [
   { to: "/admin/erdeklodok", label: "Érdeklődők", icon: Users },
   { to: "/admin/ajanlatkeresek", label: "Ajánlatkérések", icon: Inbox },
   { to: "/admin/arajanlatok", label: "Árajánlatok", icon: FileText },
+  { to: "/admin/helyszini-ajanlat", label: "Helyszíni ajánlat", icon: FileSignature },
+  { to: "/admin/munkak", label: "Munkák", icon: HardHat },
   { to: "/admin/szolgaltatasok", label: "Szolgáltatások", icon: Wrench },
   { to: "/admin/tulajdonsagok", label: "Tulajdonságkezelő", icon: SlidersHorizontal },
   { to: "/admin/referenciak", label: "Referenciák", icon: Images },
@@ -55,7 +61,19 @@ export const adminNav = [
 ] as const;
 
 function AdminLayout() {
+  return (
+    <KioskProvider>
+      <AdminShell />
+    </KioskProvider>
+  );
+}
+
+function AdminShell() {
   const [open, setOpen] = useState(false);
+  // Customer-facing screens (field-quote customer mode) switch this on: the
+  // menu and header are hidden — not unmounted, so the page below keeps its
+  // state — and the customer can't reach the rest of the admin from the tablet.
+  const kiosk = useKiosk();
   const { ready, authenticated, authUser, logout, syncError } = useDemo();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
@@ -85,6 +103,9 @@ function AdminLayout() {
           <Link
             key={n.to}
             to={n.to}
+            // Without `exact`, "/admin" counts as active on every admin page,
+            // so screen readers hear "current page" on the dashboard too.
+            activeOptions={{ exact: n.to === "/admin" }}
             onClick={() => setOpen(false)}
             className={`flex items-center gap-2.5 rounded-[var(--radius-button)] px-3 py-2.5 text-sm transition-colors ${
               active
@@ -102,7 +123,10 @@ function AdminLayout() {
 
   return (
     <div className="min-h-screen w-full bg-background">
-      <div className="sticky top-0 z-70 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-ink px-3 py-2.5 text-ink-foreground sm:px-4 sm:gap-3">
+      <div
+        style={kiosk ? { display: "none" } : undefined}
+        className="sticky top-0 z-70 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-ink px-3 py-2.5 text-ink-foreground sm:px-4 sm:gap-3"
+      >
         <div className="min-w-0">
           <span className="label-eyebrow block truncate text-accent">Védett adminfelület</span>
           {syncError ? (
@@ -133,11 +157,14 @@ function AdminLayout() {
       </div>
 
       <div className="flex w-full">
-        <aside className="hidden w-60 shrink-0 flex-col bg-sidebar p-3 text-sidebar-foreground lg:flex lg:min-h-[calc(100vh-3.25rem)]">
+        <aside
+          style={kiosk ? { display: "none" } : undefined}
+          className="hidden w-60 shrink-0 flex-col bg-sidebar p-3 text-sidebar-foreground lg:flex lg:min-h-[calc(100vh-3.25rem)]"
+        >
           <div>{items}</div>
         </aside>
 
-        {open ? (
+        {open && !kiosk ? (
           <div className="fixed inset-0 z-90 lg:hidden">
             <button
               aria-label="Menü bezárása"

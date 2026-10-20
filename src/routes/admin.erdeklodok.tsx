@@ -36,7 +36,7 @@ export const Route = createFileRoute("/admin/erdeklodok")({
 });
 
 function LeadsPage() {
-  const { leads, updateLead, quotes } = useDemo();
+  const { leads, updateLead, removeLead, quotes } = useDemo();
   const [view, setView] = useState<"tabla" | "kanban">("tabla");
   const [q, setQ] = useState("");
   const [service, setService] = useState("");
@@ -327,6 +327,23 @@ function LeadsPage() {
               <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>
                 Bezárás
               </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={async () => {
+                  if (!window.confirm(`Biztosan törli ${open.name} érdeklődő adatait? Ez nem vonható vissza.`)) return;
+                  try {
+                    await removeLead(open.id);
+                    setOpenId(null);
+                    toast.success("Az érdeklődő törölve.");
+                  } catch {
+                    toast.error("A törlés nem sikerült.");
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Törlés
+              </Button>
             </div>
           }
         >
@@ -372,8 +389,10 @@ function LeadsPage() {
               {open.files.length ? (
                 <div className="grid grid-cols-3 gap-2 pt-2">
                   {open.files.map((f) =>
-                    f.dataUrl ? (
-                      <img key={f.id} src={f.dataUrl} alt={f.name} className="h-24 w-full rounded-md object-cover" />
+                    f.url ? (
+                      <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
+                        <img src={f.url} alt={f.name} className="h-24 w-full rounded-md object-cover" />
+                      </a>
                     ) : (
                       <span key={f.id} className="rounded-md bg-muted p-2 text-[11px]">{f.name}</span>
                     ),

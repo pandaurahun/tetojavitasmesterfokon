@@ -27,6 +27,7 @@ import { Route as AdminReferenciakRouteImport } from './routes/admin.referenciak
 import { Route as AdminSzolgaltatasokRouteImport } from './routes/admin.szolgaltatasok'
 import { Route as AdminTartalmakRouteImport } from './routes/admin.tartalmak'
 import { Route as AdminTulajdonsagokRouteImport } from './routes/admin.tulajdonsagok'
+import { Route as AjanlatTokenRouteImport } from './routes/ajanlat.$token'
 import { Route as JogiSlugRouteImport } from './routes/jogi.$slug'
 import { Route as ReferenciakIndexRouteImport } from './routes/referenciak.index'
 import { Route as ReferenciakIdRouteImport } from './routes/referenciak.$id'
@@ -34,6 +35,12 @@ import { Route as SzolgaltatasokIndexRouteImport } from './routes/szolgaltatasok
 import { Route as SzolgaltatasokSlugRouteImport } from './routes/szolgaltatasok.$slug'
 import { Route as TudastarIndexRouteImport } from './routes/tudastar.index'
 import { Route as TudastarSlugRouteImport } from './routes/tudastar.$slug'
+import { Route as AdminHelysziniAjanlatIndexRouteImport } from './routes/admin.helyszini-ajanlat.index'
+import { Route as AdminHelysziniAjanlatIdRouteImport } from './routes/admin.helyszini-ajanlat.$id'
+import { Route as AdminHelysziniAjanlatBeallitasokRouteImport } from './routes/admin.helyszini-ajanlat.beallitasok'
+import { Route as AdminHelysziniAjanlatUjRouteImport } from './routes/admin.helyszini-ajanlat.uj'
+import { Route as AdminMunkakIndexRouteImport } from './routes/admin.munkak.index'
+import { Route as AdminMunkakIdRouteImport } from './routes/admin.munkak.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -125,6 +132,11 @@ const AdminTulajdonsagokRoute = AdminTulajdonsagokRouteImport.update({
   path: '/tulajdonsagok',
   getParentRoute: () => AdminRoute,
 } as any)
+const AjanlatTokenRoute = AjanlatTokenRouteImport.update({
+  id: '/ajanlat/$token',
+  path: '/ajanlat/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JogiSlugRoute = JogiSlugRouteImport.update({
   id: '/jogi/$slug',
   path: '/jogi/$slug',
@@ -160,6 +172,38 @@ const TudastarSlugRoute = TudastarSlugRouteImport.update({
   path: '/tudastar/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminHelysziniAjanlatIndexRoute =
+  AdminHelysziniAjanlatIndexRouteImport.update({
+    id: '/helyszini-ajanlat/',
+    path: '/helyszini-ajanlat/',
+    getParentRoute: () => AdminRoute,
+  } as any)
+const AdminHelysziniAjanlatIdRoute = AdminHelysziniAjanlatIdRouteImport.update({
+  id: '/helyszini-ajanlat/$id',
+  path: '/helyszini-ajanlat/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminHelysziniAjanlatBeallitasokRoute =
+  AdminHelysziniAjanlatBeallitasokRouteImport.update({
+    id: '/helyszini-ajanlat/beallitasok',
+    path: '/helyszini-ajanlat/beallitasok',
+    getParentRoute: () => AdminRoute,
+  } as any)
+const AdminHelysziniAjanlatUjRoute = AdminHelysziniAjanlatUjRouteImport.update({
+  id: '/helyszini-ajanlat/uj',
+  path: '/helyszini-ajanlat/uj',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMunkakIndexRoute = AdminMunkakIndexRouteImport.update({
+  id: '/munkak/',
+  path: '/munkak/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMunkakIdRoute = AdminMunkakIdRouteImport.update({
+  id: '/munkak/$id',
+  path: '/munkak/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -179,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/admin/szolgaltatasok': typeof AdminSzolgaltatasokRoute
   '/admin/tartalmak': typeof AdminTartalmakRoute
   '/admin/tulajdonsagok': typeof AdminTulajdonsagokRoute
+  '/ajanlat/$token': typeof AjanlatTokenRoute
   '/jogi/$slug': typeof JogiSlugRoute
   '/referenciak/$id': typeof ReferenciakIdRoute
   '/szolgaltatasok/$slug': typeof SzolgaltatasokSlugRoute
@@ -187,6 +232,12 @@ export interface FileRoutesByFullPath {
   '/referenciak/': typeof ReferenciakIndexRoute
   '/szolgaltatasok/': typeof SzolgaltatasokIndexRoute
   '/tudastar/': typeof TudastarIndexRoute
+  '/admin/helyszini-ajanlat/$id': typeof AdminHelysziniAjanlatIdRoute
+  '/admin/helyszini-ajanlat/beallitasok': typeof AdminHelysziniAjanlatBeallitasokRoute
+  '/admin/helyszini-ajanlat/uj': typeof AdminHelysziniAjanlatUjRoute
+  '/admin/munkak/$id': typeof AdminMunkakIdRoute
+  '/admin/helyszini-ajanlat/': typeof AdminHelysziniAjanlatIndexRoute
+  '/admin/munkak/': typeof AdminMunkakIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -205,6 +256,7 @@ export interface FileRoutesByTo {
   '/admin/szolgaltatasok': typeof AdminSzolgaltatasokRoute
   '/admin/tartalmak': typeof AdminTartalmakRoute
   '/admin/tulajdonsagok': typeof AdminTulajdonsagokRoute
+  '/ajanlat/$token': typeof AjanlatTokenRoute
   '/jogi/$slug': typeof JogiSlugRoute
   '/referenciak/$id': typeof ReferenciakIdRoute
   '/szolgaltatasok/$slug': typeof SzolgaltatasokSlugRoute
@@ -213,6 +265,12 @@ export interface FileRoutesByTo {
   '/referenciak': typeof ReferenciakIndexRoute
   '/szolgaltatasok': typeof SzolgaltatasokIndexRoute
   '/tudastar': typeof TudastarIndexRoute
+  '/admin/helyszini-ajanlat/$id': typeof AdminHelysziniAjanlatIdRoute
+  '/admin/helyszini-ajanlat/beallitasok': typeof AdminHelysziniAjanlatBeallitasokRoute
+  '/admin/helyszini-ajanlat/uj': typeof AdminHelysziniAjanlatUjRoute
+  '/admin/munkak/$id': typeof AdminMunkakIdRoute
+  '/admin/helyszini-ajanlat': typeof AdminHelysziniAjanlatIndexRoute
+  '/admin/munkak': typeof AdminMunkakIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -233,6 +291,7 @@ export interface FileRoutesById {
   '/admin/szolgaltatasok': typeof AdminSzolgaltatasokRoute
   '/admin/tartalmak': typeof AdminTartalmakRoute
   '/admin/tulajdonsagok': typeof AdminTulajdonsagokRoute
+  '/ajanlat/$token': typeof AjanlatTokenRoute
   '/jogi/$slug': typeof JogiSlugRoute
   '/referenciak/$id': typeof ReferenciakIdRoute
   '/szolgaltatasok/$slug': typeof SzolgaltatasokSlugRoute
@@ -241,6 +300,12 @@ export interface FileRoutesById {
   '/referenciak/': typeof ReferenciakIndexRoute
   '/szolgaltatasok/': typeof SzolgaltatasokIndexRoute
   '/tudastar/': typeof TudastarIndexRoute
+  '/admin/helyszini-ajanlat/$id': typeof AdminHelysziniAjanlatIdRoute
+  '/admin/helyszini-ajanlat/beallitasok': typeof AdminHelysziniAjanlatBeallitasokRoute
+  '/admin/helyszini-ajanlat/uj': typeof AdminHelysziniAjanlatUjRoute
+  '/admin/munkak/$id': typeof AdminMunkakIdRoute
+  '/admin/helyszini-ajanlat/': typeof AdminHelysziniAjanlatIndexRoute
+  '/admin/munkak/': typeof AdminMunkakIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -262,6 +327,7 @@ export interface FileRouteTypes {
     | '/admin/szolgaltatasok'
     | '/admin/tartalmak'
     | '/admin/tulajdonsagok'
+    | '/ajanlat/$token'
     | '/jogi/$slug'
     | '/referenciak/$id'
     | '/szolgaltatasok/$slug'
@@ -270,6 +336,12 @@ export interface FileRouteTypes {
     | '/referenciak/'
     | '/szolgaltatasok/'
     | '/tudastar/'
+    | '/admin/helyszini-ajanlat/$id'
+    | '/admin/helyszini-ajanlat/beallitasok'
+    | '/admin/helyszini-ajanlat/uj'
+    | '/admin/munkak/$id'
+    | '/admin/helyszini-ajanlat/'
+    | '/admin/munkak/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -288,6 +360,7 @@ export interface FileRouteTypes {
     | '/admin/szolgaltatasok'
     | '/admin/tartalmak'
     | '/admin/tulajdonsagok'
+    | '/ajanlat/$token'
     | '/jogi/$slug'
     | '/referenciak/$id'
     | '/szolgaltatasok/$slug'
@@ -296,6 +369,12 @@ export interface FileRouteTypes {
     | '/referenciak'
     | '/szolgaltatasok'
     | '/tudastar'
+    | '/admin/helyszini-ajanlat/$id'
+    | '/admin/helyszini-ajanlat/beallitasok'
+    | '/admin/helyszini-ajanlat/uj'
+    | '/admin/munkak/$id'
+    | '/admin/helyszini-ajanlat'
+    | '/admin/munkak'
   id:
     | '__root__'
     | '/'
@@ -315,6 +394,7 @@ export interface FileRouteTypes {
     | '/admin/szolgaltatasok'
     | '/admin/tartalmak'
     | '/admin/tulajdonsagok'
+    | '/ajanlat/$token'
     | '/jogi/$slug'
     | '/referenciak/$id'
     | '/szolgaltatasok/$slug'
@@ -323,6 +403,12 @@ export interface FileRouteTypes {
     | '/referenciak/'
     | '/szolgaltatasok/'
     | '/tudastar/'
+    | '/admin/helyszini-ajanlat/$id'
+    | '/admin/helyszini-ajanlat/beallitasok'
+    | '/admin/helyszini-ajanlat/uj'
+    | '/admin/munkak/$id'
+    | '/admin/helyszini-ajanlat/'
+    | '/admin/munkak/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -331,6 +417,7 @@ export interface RootRouteChildren {
   AjanlatkeresRoute: typeof AjanlatkeresRoute
   FolyamatRoute: typeof FolyamatRoute
   KapcsolatRoute: typeof KapcsolatRoute
+  AjanlatTokenRoute: typeof AjanlatTokenRoute
   JogiSlugRoute: typeof JogiSlugRoute
   ReferenciakIdRoute: typeof ReferenciakIdRoute
   SzolgaltatasokSlugRoute: typeof SzolgaltatasokSlugRoute
@@ -468,6 +555,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTulajdonsagokRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/ajanlat/$token': {
+      id: '/ajanlat/$token'
+      path: '/ajanlat/$token'
+      fullPath: '/ajanlat/$token'
+      preLoaderRoute: typeof AjanlatTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/jogi/$slug': {
       id: '/jogi/$slug'
       path: '/jogi/$slug'
@@ -517,6 +611,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TudastarSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/helyszini-ajanlat/': {
+      id: '/admin/helyszini-ajanlat/'
+      path: '/helyszini-ajanlat'
+      fullPath: '/admin/helyszini-ajanlat/'
+      preLoaderRoute: typeof AdminHelysziniAjanlatIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/helyszini-ajanlat/$id': {
+      id: '/admin/helyszini-ajanlat/$id'
+      path: '/helyszini-ajanlat/$id'
+      fullPath: '/admin/helyszini-ajanlat/$id'
+      preLoaderRoute: typeof AdminHelysziniAjanlatIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/helyszini-ajanlat/beallitasok': {
+      id: '/admin/helyszini-ajanlat/beallitasok'
+      path: '/helyszini-ajanlat/beallitasok'
+      fullPath: '/admin/helyszini-ajanlat/beallitasok'
+      preLoaderRoute: typeof AdminHelysziniAjanlatBeallitasokRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/helyszini-ajanlat/uj': {
+      id: '/admin/helyszini-ajanlat/uj'
+      path: '/helyszini-ajanlat/uj'
+      fullPath: '/admin/helyszini-ajanlat/uj'
+      preLoaderRoute: typeof AdminHelysziniAjanlatUjRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/munkak/': {
+      id: '/admin/munkak/'
+      path: '/munkak'
+      fullPath: '/admin/munkak/'
+      preLoaderRoute: typeof AdminMunkakIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/munkak/$id': {
+      id: '/admin/munkak/$id'
+      path: '/munkak/$id'
+      fullPath: '/admin/munkak/$id'
+      preLoaderRoute: typeof AdminMunkakIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
@@ -534,6 +670,12 @@ interface AdminRouteChildren {
   AdminTartalmakRoute: typeof AdminTartalmakRoute
   AdminTulajdonsagokRoute: typeof AdminTulajdonsagokRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminHelysziniAjanlatIdRoute: typeof AdminHelysziniAjanlatIdRoute
+  AdminHelysziniAjanlatBeallitasokRoute: typeof AdminHelysziniAjanlatBeallitasokRoute
+  AdminHelysziniAjanlatUjRoute: typeof AdminHelysziniAjanlatUjRoute
+  AdminMunkakIdRoute: typeof AdminMunkakIdRoute
+  AdminHelysziniAjanlatIndexRoute: typeof AdminHelysziniAjanlatIndexRoute
+  AdminMunkakIndexRoute: typeof AdminMunkakIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
@@ -550,6 +692,12 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminTartalmakRoute: AdminTartalmakRoute,
   AdminTulajdonsagokRoute: AdminTulajdonsagokRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminHelysziniAjanlatIdRoute: AdminHelysziniAjanlatIdRoute,
+  AdminHelysziniAjanlatBeallitasokRoute: AdminHelysziniAjanlatBeallitasokRoute,
+  AdminHelysziniAjanlatUjRoute: AdminHelysziniAjanlatUjRoute,
+  AdminMunkakIdRoute: AdminMunkakIdRoute,
+  AdminHelysziniAjanlatIndexRoute: AdminHelysziniAjanlatIndexRoute,
+  AdminMunkakIndexRoute: AdminMunkakIndexRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
@@ -560,6 +708,7 @@ const rootRouteChildren: RootRouteChildren = {
   AjanlatkeresRoute: AjanlatkeresRoute,
   FolyamatRoute: FolyamatRoute,
   KapcsolatRoute: KapcsolatRoute,
+  AjanlatTokenRoute: AjanlatTokenRoute,
   JogiSlugRoute: JogiSlugRoute,
   ReferenciakIdRoute: ReferenciakIdRoute,
   SzolgaltatasokSlugRoute: SzolgaltatasokSlugRoute,

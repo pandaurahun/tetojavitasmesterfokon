@@ -22,7 +22,6 @@ import type {
   ProjectRef,
   Quote,
   ServiceItem,
-  Settings,
 } from "./types";
 
 export type AuthUser = { email: string; role: string };
@@ -39,8 +38,12 @@ interface DemoContextValue extends DemoState {
   changePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
   uploadMedia: (file: File) => Promise<string>;
   update: (patch: Partial<DemoState>) => void;
-  addLead: (lead: Lead) => Promise<void>;
+  // `duplicate` is true when the server recognised this exact submission as
+  // one it already stored (refresh / double click / retry after a lost
+  // response) — callers should then skip conversion tracking.
+  addLead: (lead: Lead) => Promise<{ duplicate: boolean }>;
   updateLead: (id: string, patch: Partial<Lead>) => void;
+  removeLead: (id: string) => Promise<void>;
   upsertQuote: (quote: Quote) => void;
   upsertService: (service: ServiceItem) => void;
   removeService: (id: string) => void;
@@ -267,8 +270,13 @@ export function DemoProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(persistedLead),
         });
         if (!response.ok) throw new Error("Az ajánlatkérés mentése nem sikerült.");
-        mutate((p) => ({ ...p, leads: [persistedLead, ...p.leads] }));
-        trackLeadSubmit();
+        const result = (await response.json().catch(() => ({}))) as { duplicate?: unknown };
+        const duplicate = result.duplicate === true;
+        if (!duplicate) {
+          mutate((p) => ({ ...p, leads: [persistedLead, ...p.leads] }));
+          trackLeadSubmit();
+        }
+        return { duplicate };
       },
       updateLead: (id, patch) =>
         mutate((p) => ({
@@ -277,6 +285,11 @@ export function DemoProvider({ children }: { children: ReactNode }) {
             l.id === id ? { ...l, ...patch, updatedAt: new Date().toISOString() } : l,
           ),
         })),
+      removeLead: async (id) => {
+        const response = await fetch(`/api/admin/leads/${id}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Az érdeklődő törlése nem sikerült.");
+        mutate((p) => ({ ...p, leads: p.leads.filter((l) => l.id !== id) }));
+      },
       upsertQuote: (quote) =>
         mutate((p) => ({
           ...p,

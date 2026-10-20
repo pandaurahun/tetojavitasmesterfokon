@@ -18,13 +18,31 @@ import {
   siteStateSchema,
 } from "./validation.server";
 import { getAIProvider, generateQuoteDraft, generateSocialPost } from "./ai.server";
+import {
+  handleFieldQuoteAdminRequest,
+  handleFieldQuotePublicRequest,
+} from "./field-quote-routes.server";
+import { describeError } from "@/lib/error-capture";
+import { handleJobsAdminRequest } from "./jobs-routes.server";
+import { checkImageUploadHeaders, readImageUploadBody } from "./image-upload.server";
 
 const SESSION_COOKIE = "tetomester_session";
 const HOST_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`;
 const SESSION_SECONDS = 8 * 60 * 60;
 const LOGIN_WINDOW_MS = 15 * 60 * 1_000;
 const LOGIN_LIMIT = 8;
-const PASSWORD_ITERATIONS = 100_000;
+// Per-(IP,email) alone lets an attacker with N source IPs get N×LOGIN_LIMIT
+// guesses against the same admin — this second, IP-independent counter
+// bounds total guesses against one email regardless of how many IPs they
+// come from. Higher threshold than the per-IP one since it's shared across
+// every legitimate IP the real owner might use (home/office/mobile) too.
+const LOGIN_GLOBAL_LIMIT = 20;
+// OWASP's 2023+ guidance for PBKDF2-SHA256 is ≥600,000 iterations; this was
+// 100,000 originally. Existing admin rows keep whichever count they were
+// hashed with (password_iterations is stored per-row) and verify correctly
+// either way — login() transparently rehashes to the new count on the next
+// successful login, so this is a zero-downtime, no-forced-reset upgrade.
+const PASSWORD_ITERATIONS = 600_000;
 const encoder = new TextEncoder();
 
 type AdminRow = {
@@ -36,7 +54,7 @@ type AdminRow = {
   role: string;
 };
 
-type SessionRow = {
+export type SessionRow = {
   token_hash: string;
   admin_id: string;
   email: string;
@@ -48,18 +66,18 @@ type SessionRow = {
 type PayloadRow = { payload: string };
 type AttemptRow = { attempts: number; window_started_at: number };
 
-function json(data: unknown, init: ResponseInit = {}): Response {
+export function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
   headers.set("X-Content-Type-Options", "nosniff");
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
-function apiError(status: number, message: string): Response {
+export function apiError(status: number, message: string): Response {
   return json({ error: message }, { status });
 }
 
-async function readJson(request: Request, maxBytes: number): Promise<unknown> {
+export async function readJson(request: Request, maxBytes: number): Promise<unknown> {
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > maxBytes) throw new Error("PAYLOAD_TOO_LARGE");
   const body = await request.text();
@@ -67,7 +85,7 @@ async function readJson(request: Request, maxBytes: number): Promise<unknown> {
   return JSON.parse(body);
 }
 
-function sameOrigin(request: Request): boolean {
+export function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
 }
@@ -140,17 +158,40 @@ async function derivePassword(
   );
 }
 
+// Cloudflare's WebCrypto PBKDF2 has historically capped the iteration count
+// (100,000 at one point). Newer runtimes accept more, and the local one
+// does, but production's can't be verified from here — and a rejected
+// derivation would otherwise turn every admin login (via the rehash) or
+// password change into a 500, locking the owner out. So: try the strong
+// count first and fall back to the proven one rather than ever failing.
+const PASSWORD_ITERATIONS_FALLBACK = 100_000;
+
 async function hashPassword(password: string): Promise<{
   hash: string;
   salt: string;
   iterations: number;
 }> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await derivePassword(password, salt, PASSWORD_ITERATIONS);
+  let iterations = PASSWORD_ITERATIONS;
+  let hash: Uint8Array;
+  try {
+    hash = await derivePassword(password, salt, iterations);
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "pbkdf2_iterations_unsupported",
+        requested: iterations,
+        fallback: PASSWORD_ITERATIONS_FALLBACK,
+        error: describeError(error),
+      }),
+    );
+    iterations = PASSWORD_ITERATIONS_FALLBACK;
+    hash = await derivePassword(password, salt, iterations);
+  }
   return {
     hash: bytesToBase64Url(hash),
     salt: bytesToBase64Url(salt),
-    iterations: PASSWORD_ITERATIONS,
+    iterations,
   };
 }
 
@@ -158,8 +199,18 @@ async function verifyPassword(password: string, admin: AdminRow | null): Promise
   const salt = admin
     ? base64UrlToBytes(admin.password_salt)
     : base64UrlToBytes("AAAAAAAAAAAAAAAAAAAAAA");
+  // Unknown email: burn a derivation of comparable cost so response timing
+  // doesn't reveal whether the account exists — but never let an
+  // unsupported iteration count turn that path into a 500 (which would
+  // itself reveal it).
   const iterations = admin?.password_iterations ?? PASSWORD_ITERATIONS;
-  const actual = await derivePassword(password, salt, iterations);
+  let actual: Uint8Array;
+  try {
+    actual = await derivePassword(password, salt, iterations);
+  } catch (error) {
+    if (admin) throw error;
+    actual = await derivePassword(password, salt, PASSWORD_ITERATIONS_FALLBACK);
+  }
   const expected = admin ? base64UrlToBytes(admin.password_hash) : new Uint8Array(32);
   return fixedLengthEqual(actual, expected) && admin !== null;
 }
@@ -182,7 +233,7 @@ function sessionCookie(request: Request, token: string, maxAge = SESSION_SECONDS
     .join("; ");
 }
 
-async function authenticate(request: Request, workerEnv: Env): Promise<SessionRow | null> {
+export async function authenticate(request: Request, workerEnv: Env): Promise<SessionRow | null> {
   const token = parseCookies(request).get(cookieName(request));
   if (!token || token.length > 200) return null;
   const tokenHash = await sha256Hex(token);
@@ -221,7 +272,17 @@ function safeParsePayload<T>(
   }
 }
 
-async function loadState(workerEnv: Env): Promise<DemoState> {
+// Just the site settings (company name, address, tax number, ...) — the same
+// values `loadState` would return, without reading every lead and quote.
+export async function loadSiteSettings(workerEnv: Env): Promise<DemoState["settings"]> {
+  const row = await workerEnv.DB.prepare(
+    "SELECT payload FROM site_state WHERE id = 'main'",
+  ).first<PayloadRow>();
+  const stored = row ? safeParsePayload<SiteState>(row.payload, siteStateSchema) : null;
+  return hydrateSiteState(stored ?? structuredClone(siteStateFrom(initialState))).settings;
+}
+
+export async function loadState(workerEnv: Env): Promise<DemoState> {
   const database = workerEnv.DB;
   const [siteResult, leadsResult, quotesResult] = await database.batch([
     database.prepare("SELECT payload FROM site_state WHERE id = 'main'"),
@@ -346,6 +407,41 @@ async function bootstrapAdmin(request: Request, workerEnv: Env): Promise<Respons
   return json({ ok: true }, { status: 201 });
 }
 
+// Reuses the same auth_attempts table the login lockout uses (generic
+// key/attempts/window_started_at shape, not actually auth-specific) rather
+// than standing up a parallel rate-limit table, just under its own key
+// namespace (`scope`) so it can't collide with login's per-(IP,email) keys.
+// Every call counts toward the limit (unlike login, which only counts
+// failures) — the threat here is submission/upload volume, not credential
+// guessing, so successes count too.
+async function checkPublicRateLimit(
+  db: D1Database,
+  request: Request,
+  scope: string,
+  limit: number,
+  windowMs = LOGIN_WINDOW_MS,
+): Promise<boolean> {
+  const ip = request.headers.get("cf-connecting-ip") ?? "local";
+  const key = await sha256Hex(`${scope}\n${ip}`);
+  const now = Date.now();
+  const row = await db
+    .prepare("SELECT attempts, window_started_at FROM auth_attempts WHERE key = ?1")
+    .bind(key)
+    .first<AttemptRow>();
+  if (row && now - row.window_started_at < windowMs && row.attempts >= limit) return false;
+  const nextAttempts = row && now - row.window_started_at < windowMs ? row.attempts + 1 : 1;
+  const windowStarted = row && now - row.window_started_at < windowMs ? row.window_started_at : now;
+  await db
+    .prepare(
+      `INSERT INTO auth_attempts (key, attempts, window_started_at) VALUES (?1, ?2, ?3)
+       ON CONFLICT(key) DO UPDATE SET attempts = excluded.attempts,
+         window_started_at = excluded.window_started_at`,
+    )
+    .bind(key, nextAttempts, windowStarted)
+    .run();
+  return true;
+}
+
 async function login(request: Request, workerEnv: Env): Promise<Response> {
   if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
   const parsed = loginSchema.safeParse(await readJson(request, 4_096));
@@ -353,17 +449,19 @@ async function login(request: Request, workerEnv: Env): Promise<Response> {
   const email = parsed.data.email.toLowerCase();
   const ip = request.headers.get("cf-connecting-ip") ?? "local";
   const attemptKey = await sha256Hex(`${ip}\n${email}`);
-  const attempt = await workerEnv.DB.prepare(
-    "SELECT attempts, window_started_at FROM auth_attempts WHERE key = ?1",
-  )
-    .bind(attemptKey)
-    .first<AttemptRow>();
+  const globalAttemptKey = await sha256Hex(`global\n${email}`);
+  const [attempt, globalAttempt] = await Promise.all([
+    workerEnv.DB.prepare("SELECT attempts, window_started_at FROM auth_attempts WHERE key = ?1")
+      .bind(attemptKey)
+      .first<AttemptRow>(),
+    workerEnv.DB.prepare("SELECT attempts, window_started_at FROM auth_attempts WHERE key = ?1")
+      .bind(globalAttemptKey)
+      .first<AttemptRow>(),
+  ]);
   const now = Date.now();
-  if (
-    attempt &&
-    now - attempt.window_started_at < LOGIN_WINDOW_MS &&
-    attempt.attempts >= LOGIN_LIMIT
-  ) {
+  const locked = (row: AttemptRow | null, limit: number) =>
+    row !== null && now - row.window_started_at < LOGIN_WINDOW_MS && row.attempts >= limit;
+  if (locked(attempt, LOGIN_LIMIT) || locked(globalAttempt, LOGIN_GLOBAL_LIMIT)) {
     return apiError(429, "Túl sok próbálkozás. Próbáld újra később.");
   }
 
@@ -375,26 +473,31 @@ async function login(request: Request, workerEnv: Env): Promise<Response> {
     .first<AdminRow>();
   const valid = await verifyPassword(parsed.data.password, admin);
   if (!valid || !admin) {
-    const nextAttempts =
-      attempt && now - attempt.window_started_at < LOGIN_WINDOW_MS ? attempt.attempts + 1 : 1;
-    const windowStarted =
-      attempt && now - attempt.window_started_at < LOGIN_WINDOW_MS
-        ? attempt.window_started_at
-        : now;
-    await workerEnv.DB.prepare(
-      `INSERT INTO auth_attempts (key, attempts, window_started_at) VALUES (?1, ?2, ?3)
+    const bump = (row: AttemptRow | null) => ({
+      attempts: row && now - row.window_started_at < LOGIN_WINDOW_MS ? row.attempts + 1 : 1,
+      windowStarted:
+        row && now - row.window_started_at < LOGIN_WINDOW_MS ? row.window_started_at : now,
+    });
+    const next = bump(attempt);
+    const nextGlobal = bump(globalAttempt);
+    const upsert = `INSERT INTO auth_attempts (key, attempts, window_started_at) VALUES (?1, ?2, ?3)
        ON CONFLICT(key) DO UPDATE SET attempts = excluded.attempts,
-         window_started_at = excluded.window_started_at`,
-    )
-      .bind(attemptKey, nextAttempts, windowStarted)
-      .run();
+         window_started_at = excluded.window_started_at`;
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(upsert).bind(attemptKey, next.attempts, next.windowStarted),
+      workerEnv.DB.prepare(upsert).bind(
+        globalAttemptKey,
+        nextGlobal.attempts,
+        nextGlobal.windowStarted,
+      ),
+    ]);
     console.warn(JSON.stringify({ event: "admin_login_failed", at: new Date(now).toISOString() }));
     return apiError(401, "Hibás e-mail cím vagy jelszó.");
   }
 
   const token = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const tokenHash = await sha256Hex(token);
-  await workerEnv.DB.batch([
+  const statements: D1PreparedStatement[] = [
     workerEnv.DB.prepare(
       `INSERT INTO sessions
           (token_hash, admin_id, expires_at, created_at, last_seen_at, user_agent)
@@ -406,12 +509,35 @@ async function login(request: Request, workerEnv: Env): Promise<Response> {
       now,
       (request.headers.get("user-agent") ?? "").slice(0, 500),
     ),
-    workerEnv.DB.prepare("DELETE FROM auth_attempts WHERE key = ?1").bind(attemptKey),
+    workerEnv.DB.prepare("DELETE FROM auth_attempts WHERE key IN (?1, ?2)").bind(
+      attemptKey,
+      globalAttemptKey,
+    ),
     workerEnv.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?1").bind(now),
     workerEnv.DB.prepare("DELETE FROM auth_attempts WHERE window_started_at < ?1").bind(
       now - 24 * 60 * 60 * 1_000,
     ),
-  ]);
+  ];
+  if (admin.password_iterations < PASSWORD_ITERATIONS) {
+    // Best-effort upgrade: a failure here must never block the login the
+    // visitor just correctly authenticated, and the row is only rewritten
+    // if the new hash is genuinely stronger than what's stored.
+    try {
+      const rehashed = await hashPassword(parsed.data.password);
+      if (rehashed.iterations > admin.password_iterations) {
+        statements.push(
+          workerEnv.DB.prepare(
+            `UPDATE admins SET password_hash = ?2, password_salt = ?3, password_iterations = ?4, updated_at = ?5 WHERE id = ?1`,
+          ).bind(admin.id, rehashed.hash, rehashed.salt, rehashed.iterations, now),
+        );
+      }
+    } catch (error) {
+      console.warn(
+        JSON.stringify({ event: "password_rehash_skipped", error: describeError(error) }),
+      );
+    }
+  }
+  await workerEnv.DB.batch(statements);
   console.log(
     JSON.stringify({
       event: "admin_login_succeeded",
@@ -504,7 +630,7 @@ async function aiQuoteDraft(request: Request, workerEnv: Env): Promise<Response>
     });
     return json(draft);
   } catch (error) {
-    console.error(JSON.stringify({ event: "ai_quote_draft_failed", message: String(error) }));
+    console.error(JSON.stringify({ event: "ai_quote_draft_failed", error: describeError(error) }));
     return apiError(502, "Az AI ajánlatjavaslat generálása nem sikerült.");
   }
 }
@@ -532,7 +658,7 @@ async function aiSocialPost(request: Request, workerEnv: Env): Promise<Response>
     });
     return json(draft);
   } catch (error) {
-    console.error(JSON.stringify({ event: "ai_social_post_failed", message: String(error) }));
+    console.error(JSON.stringify({ event: "ai_social_post_failed", error: describeError(error) }));
     return apiError(502, "A social poszt-javaslat generálása nem sikerült.");
   }
 }
@@ -582,7 +708,8 @@ async function uploadMedia(request: Request, workerEnv: Env): Promise<Response> 
     "image/vnd.microsoft.icon": "ico",
   };
   const extension = extensions[mime];
-  if (!extension) return apiError(415, "Csak JPEG, PNG, WebP, AVIF, SVG vagy ICO kép tölthető fel.");
+  if (!extension)
+    return apiError(415, "Csak JPEG, PNG, WebP, AVIF, SVG vagy ICO kép tölthető fel.");
   const size = Number(request.headers.get("content-length") ?? 0);
   if (!Number.isFinite(size) || size <= 0) return apiError(411, "A fájlméret megadása szükséges.");
   if (size > 10 * 1024 * 1024) return apiError(413, "A kép legfeljebb 10 MB lehet.");
@@ -595,6 +722,143 @@ async function uploadMedia(request: Request, workerEnv: Env): Promise<Response> 
   });
   if (!stored) return apiError(500, "A kép mentése nem sikerült.");
   return json({ key, url: `/api/media/${key}` }, { status: 201 });
+}
+
+// Public, unauthenticated — the quote-request wizard runs before any
+// account exists, so there is no session to require. Reuses the same
+// MEDIA bucket and the existing public GET /api/media/:key for serving
+// (same trust tier as any other site image), under its own prefix and a
+// narrower image-only allowlist (no SVG/ICO — a phone photo is never going
+// to be either, and SVG specifically carries script-injection risk this
+// endpoint has no reason to accept). Same CSRF check as POST /api/leads.
+async function uploadLeadMedia(request: Request, workerEnv: Env): Promise<Response> {
+  if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
+  const maxBytes = 8 * 1024 * 1024;
+  const headerCheck = checkImageUploadHeaders(request, maxBytes);
+  if ("error" in headerCheck) return apiError(headerCheck.error.status, headerCheck.error.message);
+  // Unauthenticated endpoint: the bytes must really be a raster image, not
+  // just labelled as one (see image-upload.server.ts).
+  const upload = await readImageUploadBody(request, maxBytes);
+  if ("error" in upload) return apiError(upload.error.status, upload.error.message);
+  const { bytes, mime, extension } = upload.image;
+
+  const date = new Date().toISOString().slice(0, 10);
+  const key = `media/lead-uploads/${date}/${crypto.randomUUID()}.${extension}`;
+  const stored = await workerEnv.MEDIA.put(key, bytes, {
+    httpMetadata: { contentType: mime, cacheControl: "public, max-age=31536000, immutable" },
+  });
+  if (!stored) return apiError(500, "A kép mentése nem sikerült.");
+  return json({ key, url: `/api/media/${key}` }, { status: 201 });
+}
+
+// R2 keys of the photos a visitor uploaded through the wizard, as referenced by
+// the lead's own `files[].url`. Only the public lead-upload prefix qualifies —
+// a crafted payload can't make a lead deletion remove any other object.
+function leadPhotoKeys(payload: string): string[] {
+  try {
+    const files = (JSON.parse(payload) as { files?: { url?: unknown }[] }).files ?? [];
+    const keys: string[] = [];
+    for (const file of files) {
+      const match =
+        typeof file.url === "string"
+          ? /^\/api\/media\/(media\/lead-uploads\/[A-Za-z0-9_\-/.]+)$/.exec(file.url)
+          : null;
+      const key = match?.[1];
+      if (key && !key.includes("..")) keys.push(key);
+    }
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
+const LEAD_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+
+// Submitting the quote-request form must be idempotent: a refresh after
+// submit, a double click, or a retry after a lost response must not create a
+// second lead for the same person. Two layers:
+//   1. the client sends one stable id per submission, and the INSERT below is
+//      `ON CONFLICT(id) DO NOTHING` — the atomic guard, so two simultaneous
+//      requests can never both insert it;
+//   2. a request whose content is identical to a lead stored a few minutes ago
+//      (a stale client that lost its id) is folded into that lead.
+// Either way the visitor gets the normal "ok" answer, flagged `duplicate`, so
+// they see a confirmation rather than an error — and duplicates cost no rate-
+// limit budget, since they create nothing.
+async function createLead(request: Request, workerEnv: Env): Promise<Response> {
+  if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
+  const parsed = leadSchema.safeParse(await readJson(request, 256_000));
+  // The charset check keeps every stored id deletable through the admin
+  // route, which only accepts [A-Za-z0-9_-].
+  if (!parsed.success || !/^[A-Za-z0-9_-]{1,120}$/.test(parsed.data.id)) {
+    return apiError(400, "Az ajánlatkérés adatai nem megfelelőek.");
+  }
+  const submitted = parsed.data;
+  const db = workerEnv.DB;
+
+  let leadId = submitted.id;
+  const sameId = await db
+    .prepare("SELECT id, json_extract(payload, '$.phone') AS phone FROM leads WHERE id = ?1")
+    .bind(submitted.id)
+    .first<{ id: string; phone: string | null }>();
+  if (sameId) {
+    if (sameId.phone === submitted.phone) return json({ ok: true, id: sameId.id, duplicate: true });
+    // Same id but a different person: a real request must never be dropped,
+    // so it is stored under a fresh id instead.
+    leadId = `${submitted.id.slice(0, 100)}-${crypto.randomUUID().slice(0, 8)}`;
+  }
+
+  const since = new Date(Date.now() - LEAD_DUPLICATE_WINDOW_MS).toISOString();
+  const sameContent = await db
+    .prepare(
+      `SELECT id FROM leads
+        WHERE created_at >= ?1
+          AND json_extract(payload, '$.phone') = ?2
+          AND json_extract(payload, '$.name') = ?3
+          AND IFNULL(json_extract(payload, '$.email'), '') = ?4
+          AND json_extract(payload, '$.service') = ?5
+          AND json_extract(payload, '$.city') = ?6
+          AND IFNULL(json_extract(payload, '$.message'), '') = ?7
+        ORDER BY created_at ASC LIMIT 1`,
+    )
+    .bind(
+      since,
+      submitted.phone,
+      submitted.name,
+      submitted.email,
+      submitted.service,
+      submitted.city,
+      submitted.message ?? "",
+    )
+    .first<{ id: string }>();
+  if (sameContent) return json({ ok: true, id: sameContent.id, duplicate: true });
+
+  if (!(await checkPublicRateLimit(db, request, "lead", 5))) {
+    return apiError(429, "Túl sok próbálkozás. Próbáld újra később.");
+  }
+
+  // createdAt is stamped here, not taken from the (unauthenticated,
+  // client-supplied) payload — the leads list sorts by this column, and an
+  // unvalidated client string could corrupt that ordering. The wizard's own
+  // client-side createdAt is only ever used for its local optimistic UI state,
+  // never trusted for the persisted record.
+  const lead: Lead = {
+    ...submitted,
+    id: leadId,
+    createdAt: new Date().toISOString(),
+    files: submitted.files.map(({ dataUrl: _dataUrl, ...file }) => file),
+  };
+  const inserted = await db
+    .prepare(
+      `INSERT INTO leads (id, created_at, payload, updated_at) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .bind(lead.id, lead.createdAt, JSON.stringify(lead), Date.now())
+    .run();
+  // Zero changed rows: an identical request inserted this id between our
+  // check and our write (double click / two tabs). Same outcome as above.
+  if (inserted.meta?.changes === 0) return json({ ok: true, id: lead.id, duplicate: true });
+  return json({ ok: true, id: lead.id }, { status: 201 });
 }
 
 const SITE_ORIGIN = "https://tetojavitasmesterfokon.hu";
@@ -654,26 +918,60 @@ export async function handleBackendRequest(
     if (request.method === "GET" && url.pathname.startsWith("/api/media/")) {
       return await serveMedia(url.pathname, runtimeEnv);
     }
+    if (url.pathname.startsWith("/api/field-quotes/public/")) {
+      const response = await handleFieldQuotePublicRequest(request, url, runtimeEnv);
+      if (response) return response;
+    }
+    if (url.pathname.startsWith("/api/admin/field-quotes")) {
+      const response = await handleFieldQuoteAdminRequest(request, url, runtimeEnv);
+      if (response) return response;
+    }
+    if (url.pathname === "/api/admin/jobs" || url.pathname.startsWith("/api/admin/jobs/")) {
+      const response = await handleJobsAdminRequest(request, url, runtimeEnv);
+      if (response) return response;
+    }
     if (request.method === "GET" && url.pathname === "/api/public-state") {
       return json(publicState(await loadState(runtimeEnv)), {
         headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=120" },
       });
     }
+    if (request.method === "POST" && url.pathname === "/api/leads/media") {
+      if (!(await checkPublicRateLimit(runtimeEnv.DB, request, "lead-media", 20))) {
+        return apiError(429, "Túl sok próbálkozás. Próbáld újra később.");
+      }
+      return await uploadLeadMedia(request, runtimeEnv);
+    }
     if (request.method === "POST" && url.pathname === "/api/leads") {
+      return await createLead(request, runtimeEnv);
+    }
+    // Leads live in their own D1 table, not the site_state blob, so
+    // removing one from local admin state and saving the blob (like
+    // services/projects do) would never actually delete the row — this is
+    // the only way a lead's data can be removed at all today.
+    if (request.method === "DELETE" && url.pathname.startsWith("/api/admin/leads/")) {
       if (!sameOrigin(request)) return apiError(403, "Érvénytelen kérés.");
-      const parsed = leadSchema.safeParse(await readJson(request, 256_000));
-      if (!parsed.success) return apiError(400, "Az ajánlatkérés adatai nem megfelelőek.");
-      const lead: Lead = {
-        ...parsed.data,
-        files: parsed.data.files.map(({ dataUrl: _dataUrl, ...file }) => file),
-      };
-      await runtimeEnv.DB.prepare(
-        `INSERT INTO leads (id, created_at, payload, updated_at) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO NOTHING`,
-      )
-        .bind(lead.id, lead.createdAt, JSON.stringify(lead), Date.now())
-        .run();
-      return json({ ok: true, id: lead.id }, { status: 201 });
+      if (!(await authenticate(request, runtimeEnv))) {
+        return apiError(401, "Bejelentkezés szükséges.");
+      }
+      const leadId = url.pathname.slice("/api/admin/leads/".length);
+      if (!leadId || leadId.length > 120 || !/^[a-zA-Z0-9_-]+$/.test(leadId)) {
+        return apiError(404, "Az érdeklődő nem található.");
+      }
+      // The visitor's own uploaded photos go with the lead (erasure should
+      // not leave a stranger's house photos reachable by URL in R2).
+      const row = await runtimeEnv.DB.prepare("SELECT payload FROM leads WHERE id = ?1")
+        .bind(leadId)
+        .first<PayloadRow>();
+      await runtimeEnv.DB.prepare("DELETE FROM leads WHERE id = ?1").bind(leadId).run();
+      const photoKeys = row ? leadPhotoKeys(row.payload) : [];
+      if (photoKeys.length > 0) {
+        await runtimeEnv.MEDIA.delete(photoKeys).catch((error) =>
+          console.error(
+            JSON.stringify({ event: "lead_photo_cleanup_failed", error: describeError(error) }),
+          ),
+        );
+      }
+      return json({ ok: true });
     }
     if (request.method === "POST" && url.pathname === "/api/admin/bootstrap") {
       return await bootstrapAdmin(request, runtimeEnv);
@@ -731,7 +1029,7 @@ export async function handleBackendRequest(
         event: "api_error",
         path: url.pathname,
         method: request.method,
-        message: error instanceof Error ? error.message : "Unknown error",
+        error: describeError(error),
       }),
     );
     return apiError(tooLarge ? 413 : 500, tooLarge ? "A kérés túl nagy." : "Szerverhiba történt.");

@@ -1,8 +1,19 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X, PhoneCall, Check } from "lucide-react";
 import { useCmsSection, useDemo, newId, nowStamp } from "./store";
 import { trackCallbackSubmit } from "@/lib/analytics";
+import { clearSubmissionId, submissionId } from "@/lib/submission-id";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,13 +77,19 @@ function CallbackModal({
     consent: false,
   });
 
+  // State updates are async — the ref stops a double click firing two requests.
+  const submittingRef = useRef(false);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await addLead({
-        id: newId("lead"),
+      const { duplicate } = await addLead({
+        // Stable across retries of the same request, so the server stores it once.
+        id: submissionId("callback", [form.name, form.phone, form.city, form.when, service]),
         createdAt: new Date().toISOString(),
         name: form.name || "Nem adott meg nevet",
         phone: form.phone,
@@ -91,11 +108,13 @@ function CallbackModal({
         notes: [],
         timeline: [{ id: newId("tl"), date: nowStamp(), title: "Visszahívás kérés a weboldalról" }],
       });
-      trackCallbackSubmit();
+      if (!duplicate) trackCallbackSubmit();
+      clearSubmissionId("callback");
       setDone(true);
     } catch {
       setSubmitError("A kérés mentése nem sikerült. Kérjük, próbáld újra vagy hívj minket.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -107,6 +126,17 @@ function CallbackModal({
       setForm({ name: "", phone: "", city: "", when: "Ma délután", consent: false });
     }, 250);
   };
+
+  // Esc closes the dialog (keyboard users otherwise have to tab to the X).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -123,6 +153,9 @@ function CallbackModal({
             className="absolute inset-0 bg-[color-mix(in_oklab,var(--ink)_70%,transparent)]"
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={value("title", "Mikor hívhatjuk?")}
             initial={{ y: 40, scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 20, opacity: 0 }}
@@ -263,11 +296,20 @@ function CallbackModal({
   );
 }
 
+// The label is linked to its control (for/id) — otherwise a screen reader
+// announces an unnamed edit field and tapping the label doesn't focus it.
 function Field({ label, children }: { label: string; children: ReactNode }) {
+  const id = useId();
+  const control = isValidElement<{ id?: string }>(children) ? children : null;
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-      {children}
+      <Label
+        htmlFor={control ? (control.props.id ?? id) : undefined}
+        className="text-xs font-medium text-muted-foreground"
+      >
+        {label}
+      </Label>
+      {control ? cloneElement(control, { id: control.props.id ?? id }) : children}
     </div>
   );
 }

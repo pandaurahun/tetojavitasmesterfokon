@@ -46,6 +46,11 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Visitors get the friendly message only (never an error text or a stack).
+  // In the admin area — a signed-in owner — the error message itself is shown
+  // too, so a failure can be reported or diagnosed without opening DevTools.
+  const inAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -56,6 +61,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Váratlan hiba történt. Próbáld újra, vagy térj vissza a kezdőlapra.
         </p>
+        {inAdmin && error?.message ? (
+          <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left text-xs break-words whitespace-pre-wrap text-muted-foreground">
+            {error.message.slice(0, 600)}
+          </pre>
+        ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -131,19 +141,28 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function Analytics() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // If consent was granted while this browser was on the public site
+  // earlier, the admin's own /admin/* activity shouldn't still be reported
+  // alongside real customer behavior — an admin's page views and actions
+  // aren't customer conversions and would otherwise pollute GA4/Meta data
+  // (and, incidentally, keep those SDKs from making any further calls at
+  // all while working in the admin tool).
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
 
   useEffect(() => {
+    if (isAdminRoute) return;
     captureAttributionFromUrl();
     initAnalytics();
-  }, []);
+  }, [isAdminRoute]);
 
   useEffect(() => {
+    if (isAdminRoute) return;
     // Deferred (not requestAnimationFrame — that never fires while the tab
     // is backgrounded, which would silently drop the event) so TanStack
     // Router's <HeadContent/> has applied the new <title> by the time we read it.
     const timer = setTimeout(() => trackPageView(pathname, document.title), 50);
     return () => clearTimeout(timer);
-  }, [pathname]);
+  }, [pathname, isAdminRoute]);
 
   return null;
 }

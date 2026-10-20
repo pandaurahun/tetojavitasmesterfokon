@@ -11,6 +11,7 @@ const demoFileSchema = z.object({
   size: z.number().int().min(0).max(20_000_000),
   kind: z.enum(["kep", "dokumentum"]),
   dataUrl: z.string().max(1_500_000).optional(),
+  url: shortText.optional(),
 });
 
 const timelineSchema = z.object({

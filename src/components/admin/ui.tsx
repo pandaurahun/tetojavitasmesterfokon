@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactNode } from "react";
 import { Label } from "@/components/ui/label";
 import { statusLabels, quoteStatusLabels, urgencyLabels } from "@/demo/data";
 
@@ -128,19 +128,50 @@ export function UrgencyPill({ urgency }: { urgency: string }) {
 export function AdminField({
   label,
   hint,
+  htmlFor,
   children,
   className = "",
 }: {
   label: string;
   hint?: string;
+  /** The control's id, when the control sits inside a wrapper element. */
+  htmlFor?: string;
   children: ReactNode;
   className?: string;
 }) {
+  const fieldId = useId();
+  const hintId = hint ? `${fieldId}-hint` : undefined;
+  // The label and its control are siblings, so they must be linked explicitly:
+  // otherwise a screen reader announces an unnamed edit field and clicking the
+  // label does not focus the control. A single control child (Input, Textarea,
+  // NativeSelect, or a bare input/select/textarea) gets the id here; a control
+  // inside a wrapper element is linked through the `htmlFor` prop instead.
+  const candidate = isValidElement<{ id?: string; "aria-describedby"?: string }>(children)
+    ? children
+    : null;
+  const single =
+    candidate &&
+    (typeof candidate.type !== "string" || ["input", "select", "textarea"].includes(candidate.type))
+      ? candidate
+      : null;
+  const controlId = htmlFor ?? (single ? (single.props.id ?? fieldId) : undefined);
+  const control = single
+    ? cloneElement(single, {
+        id: single.props.id ?? fieldId,
+        ...(hintId ? { "aria-describedby": hintId } : {}),
+      })
+    : children;
   return (
     <div className={`space-y-1.5 ${className}`}>
-      <Label className="text-xs font-semibold text-muted-foreground">{label}</Label>
-      {children}
-      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+      <Label htmlFor={controlId} className="text-xs font-semibold text-muted-foreground">
+        {label}
+      </Label>
+      {control}
+      {hint ? (
+        <p id={hintId} className="text-[11px] text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -150,14 +181,23 @@ export function NativeSelect({
   onChange,
   children,
   className = "",
+  id,
+  "aria-describedby": ariaDescribedBy,
+  "aria-label": ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
   children: ReactNode;
   className?: string;
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-label"?: string;
 }) {
   return (
     <select
+      id={id}
+      aria-describedby={ariaDescribedBy}
+      aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={`h-10 w-full rounded-[var(--radius-button)] border border-input bg-surface px-3 text-sm ${className}`}

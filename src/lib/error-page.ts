@@ -1,9 +1,13 @@
+// Wording matches __root.tsx's React-level error boundary — this is the
+// rarer, lower-level fallback for failures that happen before React can
+// even mount (an h3/SSR-layer crash), but a visitor shouldn't be able to
+// tell the two apart.
 export function renderErrorPage(): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="hu">
   <head>
     <meta charset="utf-8" />
-    <title>This page didn't load</title>
+    <title>Ez az oldal nem töltődött be</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body { font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #fafafa; color: #111; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
@@ -18,11 +22,11 @@ export function renderErrorPage(): string {
   </head>
   <body>
     <div class="card">
-      <h1>This page didn't load</h1>
-      <p>Something went wrong on our end. You can try refreshing or head back home.</p>
+      <h1>Ez az oldal nem töltődött be</h1>
+      <p>Váratlan hiba történt. Próbáld újra, vagy térj vissza a kezdőlapra.</p>
       <div class="actions">
-        <button class="primary" onclick="location.reload()">Try again</button>
-        <a class="secondary" href="/">Go home</a>
+        <button class="primary" onclick="location.reload()">Újrapróbálom</button>
+        <a class="secondary" href="/">Kezdőlap</a>
       </div>
     </div>
   </body>
